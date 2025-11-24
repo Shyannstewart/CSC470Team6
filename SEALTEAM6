@@ -114,5 +114,65 @@ class OOAD:
 
     res.status = "CHECKED IN"
     return res
+#REPORTS - Jose Guzman
+Class Reports:
+    #Inherit Info from OOAD
+    def __init__(self, ooad):
+        self.ooad = ooad
+        self.capacity = 45
 
+    #define expected occupancy report 
+    def expected_occupancy_report(self):
+        start = date.today()
+        days = 30
+
+        #set format and store percentage
+        report_lines = []
+        total_occupancy_percent = 0
+
+        #loop for info within timeframe
+        for i in range(days):
+            current_day = start + timedelta(days=i)
+
+            prepaid = 0
+            sixty_day = 0 
+            conventional = 0
+            incentive = 0
+        
+            #Nested loop for information gathering
+            for res in self.ooad.reservations.values():
+                #If room is not booked continue to next day
+                if res.status != "Active":
+                    continue
+                
+                #Else gather info
+                stay_start = res.arrival
+                stay_end = res.arrival + timedelta(days=res.days)
+
+                if stay_start <= current_day < stay_end:
+                    #Find Reservation type and add
+                    if res.r_type == "P":
+                        prepaid += 1
+                    elif res.r_type == "SD":
+                        sixty_day += 1
+                    elif res.r_type == "C":
+                        conventional += 1
+                    elif res.r_type == "I":
+                        incentive += 1
+
+            #Organize info and formula for occupancy percent        
+            total = prepaid + sixty_day + conventional + incentive
+            occupancy_rate = (total/self.capacity) * 100
+            total_occupancy_percent += occupancy_rate
+
+            #Format to report
+            report_lines.append(
+                f"{current_day} | P:{prepaid} SD:{sixty_day} C:{conventional} "
+                f"I:{incentive} | Total:{total} | {occupancy_rate:.1f}%"
+            )
+        #Loop calc rate and join lines
+        avg_rate = total_occupancy_percent / days
+        report_lines.append(f"\nAverage Expected Occupancy: {avg_rate:.1f}%")
+
+        return "\n".join(report_lines)
     
