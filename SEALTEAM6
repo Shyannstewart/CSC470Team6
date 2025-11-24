@@ -1,1 +1,97 @@
-Print("Hello World")
+import tkinter as tk
+from tkinter import messagebox
+from datetime import date
+from decimal import Decimal
+
+#defining reservations
+
+class Reservation:
+  def __init__(self, res_id, r_type, name, days, arrival, email):
+    self.res_id = res_id
+    self.r_type = r_type ###reservation types SD, C, I, P
+    self.name = name
+    self.days = days
+    self.arrival = arrival
+    self.email = email
+    self.total = Decimal("0.00")
+    self.status = "Active"  #status of reservation - active, checked in, checked out, canceled
+
+#OOAD System Logic
+
+class OOAD:
+  def __init__(self):
+    self.reservations = {}
+    self.next_id = 1
+
+  def date_format(self, s):
+    m, d, y = s.split("/")
+    return date(int(m), int(d), int(y))
+
+  def stay_valid(self, s):
+    return s.isdigit() and 1 <= int(s) <= 14
+
+  def email_valid(self, s):
+    return "@" in s and "." in s and len(s) <= 40
+
+  def res_type(self, r_type):
+    return {
+      "SD": "60-Day",
+      "C": "Conventional",
+      "I": "Incentive",
+      "P": "Prepaid"
+    }.get(r_type, "Unknown")
+
+  def res_price(self, r_type, days):
+    base = Decimal("100")
+
+    if r_type == "SD":
+      return base * days
+    if r_type == "C":
+      return base * days * Decimal(1.10)
+    if r_type == "I":
+      return base * days * Decimal("0.80")
+    if r_type == "P":
+      return base * days * Decimal("0.90")
+
+  def add_res(self, r_type, form):
+    name = form["name"].strip()
+    days = form["days"]
+    arrival = form["arrival"]
+    email = form["email"]
+
+    if name == "" or len(name) > 35:
+      raise ValueError("Invalid name")
+    if not self.stay_valid(days):
+      raise ValueError("Days must be 1-14")
+    if not self.email_valid(email):
+      raise ValueError("Invalid email")
+
+
+    arrival_date = self.date_format(arrival)
+    days_int = int(days)
+
+    res = Reservation(
+      self.next_id,
+      r_type,
+      name,
+      days_int,
+      arrival_date,
+      email
+    )
+
+    res.total = self.res_price(r_type, days_int)
+    self.reservations[self.next_id] = res
+    self.next_id += 1
+    return res
+
+  def cancel_reservation(self, res_id):
+    res_id = int(res_id)
+    if res_id not in self.reservations:
+      raise ValueError("Reservation not found")
+    res = self.reservations[res_id]
+    if res.status != "CHECKED IN":
+      raise ValueError("Must be checked in first")
+
+    res.status = "CHECKED OUT"
+    return res
+    
