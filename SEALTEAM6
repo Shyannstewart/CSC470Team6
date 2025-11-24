@@ -88,10 +88,31 @@ class OOAD:
     res_id = int(res_id)
     if res_id not in self.reservations:
       raise ValueError("Reservation not found")
+    self.reservations[res_id].status = "CANCELED"
+    return self.reservations[res_id]
+
+  def check_in(self, res_id):
+    res_id = int(res_id)
+    if res_id not in self.reservations:
+      raise ValueError("Reservation not found")
+
+    res = self.reservations[res_id]
+    if res.status == "CANCELED":
+      raise ValueError("Cannot check in a canceled reservation")
+
+    res.status = "CHECKED IN"
+    return res
+
+  def check_out(self, res_id):
+    res_id = int(res_id)
+    if res_id not in self.reservations:
+      raise ValueError("Reservation not found")
+
     res = self.reservations[res_id]
     if res.status != "CHECKED IN":
-      raise ValueError("Must be checked in first")
+      raise ValueError("Must be check in first")
 
-    res.status = "CANCELED"
+    res.status = "CHECKED IN"
     return res
+
     
