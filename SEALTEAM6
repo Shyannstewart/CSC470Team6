@@ -47,7 +47,7 @@ class OOAD:
     if r_type == "SD":
       return base * days
     if r_type == "C":
-      return base * days * Decimal(1.10)
+      return base * days * Decimal("1.10")
     if r_type == "I":
       return base * days * Decimal("0.80")
     if r_type == "P":
@@ -92,6 +92,6 @@ class OOAD:
     if res.status != "CHECKED IN":
       raise ValueError("Must be checked in first")
 
-    res.status = "CHECKED OUT"
+    res.status = "CANCELED"
     return res
     
