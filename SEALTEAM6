@@ -176,3 +176,106 @@ Class Reports:
 
         return "\n".join(report_lines)
     
+ #Jaheim Patterson Billing Demo 
+   
+def display_rooms():
+    print("\nAvailable Rooms:")
+    print("1. Single Room  - $80 per night")
+    print("2. Double Room  - $120 per night")
+    print("3. Deluxe Room  - $200 per night\n")
+
+def get_room_price(choice: int) -> Decimal:
+    prices = {
+        1: Decimal("80.00"),
+        2: Decimal("120.00"),
+        3: Decimal("200.00")
+    }
+    return prices.get(choice, None)
+
+def calculate_bill(room_price: Decimal, nights: int, discount: Decimal = Decimal("0.00")):
+    subtotal = (room_price * Decimal(nights)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    tax = (subtotal * Decimal("0.10")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)  # 10% tax
+    total = (subtotal + tax - discount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return subtotal, tax, total
+
+def billing_cli():
+    print("===================================")
+    print("      HOTEL BILLING SYSTEM")
+    print("===================================")
+
+    name = input("Enter Guest Name: ").strip()
+    try:
+        nights = int(input("Enter number of nights: ").strip())
+    except ValueError:
+        print("Invalid number of nights")
+        return
+
+    display_rooms()
+    try:
+        room_choice = int(input("Choose a room (1-3): ").strip())
+    except ValueError:
+        print("Invalid choice")
+        return
+
+    price = get_room_price(room_choice)
+    if price is None:
+        print("Invalid room choice!")
+        return
+
+    discount_option = input("Apply discount? (yes/no): ").lower().strip()
+    discount = Decimal("0.00")
+    if discount_option == "yes":
+        try:
+            discount = Decimal(input("Enter discount amount (e.g. 10.00): ").strip())
+        except Exception:
+            print("Invalid discount amount; using 0.00")
+            discount = Decimal("0.00")
+
+    subtotal, tax, total = calculate_bill(price, nights, discount)
+
+    print("\n===================================")
+    print("              BILL")
+    print("===================================")
+    print(f"Guest Name      : {name}")
+    print(f"Nights Stayed   : {nights}")
+    print(f"Room Price      : ${price}")
+    print(f"Subtotal        : ${subtotal:.2f}")
+    print(f"Tax (10%)       : ${tax:.2f}")
+    print(f"Discount        : -${discount:.2f}")
+    print("-----------------------------------")
+    print(f"Total Amount    : ${total:.2f}")
+    print("===================================")
+
+# -------------------------
+# Example usage / small demo
+# -------------------------
+def demo_ooad_and_reports():
+    o = OOAD()
+    # add some sample reservations
+    try:
+        o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
+        o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
+        o.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com"})
+    except ValueError as e:
+        print("Demo add_res error:", e)
+
+    print("\nAll reservations:")
+    for r in o.list_reservations():
+        print(r)
+
+    report = Reports(o, capacity=45)
+    print("\nExpected occupancy (next 7 days):")
+    print(report.expected_occupancy_report(days_ahead=7))
+
+if __name__ == "__main__":
+    # If run with argument "demo", run demo; with "bill", run billing CLI; otherwise show both choices
+    if len(sys.argv) > 1 and sys.argv[1] == "demo":
+        demo_ooad_and_reports()
+    elif len(sys.argv) > 1 and sys.argv[1] == "bill":
+        billing_cli()
+    else:
+        print("Run the script with one of the options:")
+        print("  python hotel.py demo   # shows OOAD demo + report")
+        print("  python hotel.py bill   # runs the billing CLI demo")
+        # For convenience run demo by default
+        demo_ooad_and_reports()
