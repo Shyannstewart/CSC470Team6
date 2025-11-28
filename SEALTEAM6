@@ -14,7 +14,6 @@ class Reservation:
     self.days = days
     self.arrival = arrival
     self.email = email
-    self.room_number = room_number
     self.total = Decimal("0.00")
     self.status = "Active"  #status of reservation - active, checked in, checked out, canceled
 
@@ -54,6 +53,9 @@ class OOAD:
       return base * days * Decimal("0.80")
     if r_type == "P":
       return base * days * Decimal("0.90")
+
+  def list_reservations(self):
+    return list(self.reservations.values())
 
   def add_res(self, r_type, form):
     name = form["name"].strip()
