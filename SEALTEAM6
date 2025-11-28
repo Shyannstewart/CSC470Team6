@@ -1,7 +1,8 @@
 import tkinter as tk
+import sys
 from tkinter import messagebox
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 #defining reservations - Juelz Moore
 
@@ -25,7 +26,7 @@ class OOAD:
 
   def date_format(self, s):
     m, d, y = s.split("/")
-    return date(int(m), int(d), int(y))
+    return date(int(y), int(m), int(d))
 
   def stay_valid(self, s):
     return s.isdigit() and 1 <= int(s) <= 14
@@ -112,7 +113,7 @@ class OOAD:
     if res.status != "CHECKED IN":
       raise ValueError("Must be check in first")
 
-    res.status = "CHECKED IN"
+    res.status = "CHECKED OUT"
     return res
 #REPORTS - Jose Guzman
 class Reports:
