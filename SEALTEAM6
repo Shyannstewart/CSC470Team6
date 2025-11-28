@@ -14,6 +14,7 @@ class Reservation:
     self.days = days
     self.arrival = arrival
     self.email = email
+    self.room_number = room_number
     self.total = Decimal("0.00")
     self.status = "Active"  #status of reservation - active, checked in, checked out, canceled
 
