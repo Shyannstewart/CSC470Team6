@@ -269,7 +269,7 @@ def demo_ooad_and_reports():
 
     report = Reports(o)
     print("\nExpected occupancy (next 7 days):")
-    print(report.expected_occupancy_report(days_ahead=7))
+    print(report.expected_occupancy_report()[:7])
 
 if __name__ == "__main__":
     # If run with argument "demo", run demo; with "bill", run billing CLI; otherwise show both choices
