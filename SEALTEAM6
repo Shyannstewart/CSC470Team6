@@ -3,7 +3,7 @@ from tkinter import messagebox
 from datetime import date, timedelta
 from decimal import Decimal
 
-#defining reservations
+#defining reservations - Juelz Moore
 
 class Reservation:
   def __init__(self, res_id, r_type, name, days, arrival, email):
@@ -115,7 +115,7 @@ class OOAD:
     res.status = "CHECKED IN"
     return res
 #REPORTS - Jose Guzman
-Class Reports:
+class Reports:
     #Inherit Info from OOAD
     def __init__(self, ooad):
         self.ooad = ooad
