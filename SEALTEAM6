@@ -267,7 +267,7 @@ def demo_ooad_and_reports():
     for r in o.list_reservations():
         print(r)
 
-    report = Reports(o, capacity=45)
+    report = Reports(o)
     print("\nExpected occupancy (next 7 days):")
     print(report.expected_occupancy_report(days_ahead=7))
 
