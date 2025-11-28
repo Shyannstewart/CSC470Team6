@@ -271,15 +271,159 @@ def demo_ooad_and_reports():
     print("\nExpected occupancy (next 7 days):")
     print(report.expected_occupancy_report()[:7])
 
+def run_gui():
+    ooad = OOAD()
+
+    root = tk.Tk()
+    root.title("Ophelia's Oasis HRS")
+
+    # ---------- Left side: Reservation form ----------
+    form_frame = tk.Frame(root, padx=10, pady=10)
+    form_frame.grid(row=0, column=0, sticky="n")
+
+    tk.Label(form_frame, text="Name:").grid(row=0, column=0, sticky="w")
+    name_entry = tk.Entry(form_frame, width=25)
+    name_entry.grid(row=0, column=1)
+
+    tk.Label(form_frame, text="Days (1–14):").grid(row=1, column=0, sticky="w")
+    days_entry = tk.Entry(form_frame, width=10)
+    days_entry.grid(row=1, column=1, sticky="w")
+
+    tk.Label(form_frame, text="Arrival (MM/DD/YYYY):").grid(row=2, column=0, sticky="w")
+    arrival_entry = tk.Entry(form_frame, width=15)
+    arrival_entry.grid(row=2, column=1, sticky="w")
+
+    tk.Label(form_frame, text="Email:").grid(row=3, column=0, sticky="w")
+    email_entry = tk.Entry(form_frame, width=25)
+    email_entry.grid(row=3, column=1)
+
+    tk.Label(form_frame, text="Type:").grid(row=4, column=0, sticky="w")
+    type_var = tk.StringVar(value="C")
+    type_menu = tk.OptionMenu(form_frame, type_var, "SD", "C", "I", "P")
+    type_menu.grid(row=4, column=1, sticky="w")
+
+    def add_reservation():
+        form = {
+            "name": name_entry.get(),
+            "days": days_entry.get(),
+            "arrival": arrival_entry.get(),
+            "email": email_entry.get()
+        }
+        r_type = type_var.get()
+        try:
+            res = ooad.add_res(r_type, form)
+            messagebox.showinfo("Success", f"Reservation #{res.res_id} created.\nTotal: ${res.total}")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    add_button = tk.Button(form_frame, text="Add Reservation", command=add_reservation)
+    add_button.grid(row=5, column=0, columnspan=2, pady=8)
+
+    # ---------- Right side: Reservation list + actions ----------
+    list_frame = tk.Frame(root, padx=10, pady=10)
+    list_frame.grid(row=0, column=1, sticky="n")
+
+    tk.Label(list_frame, text="Reservations:").grid(row=0, column=0, sticky="w")
+
+    res_listbox = tk.Listbox(list_frame, width=70, height=12)
+    res_listbox.grid(row=1, column=0, columnspan=3)
+
+    def refresh_listbox():
+        res_listbox.delete(0, tk.END)
+        for res in ooad.list_reservations():
+            line = (
+                f"ID {res.res_id} | {res.name} | {res.r_type} | "
+                f"{res.arrival} | {res.days} nights | {res.status}"
+            )
+            res_listbox.insert(tk.END, line)
+
+    def get_selected_res_id():
+        sel = res_listbox.curselection()
+        if not sel:
+            messagebox.showwarning("Select", "Please select a reservation first.")
+            return None
+        line = res_listbox.get(sel[0])
+        # line starts with "ID X | ..."
+        try:
+            parts = line.split()
+            return int(parts[1])
+        except Exception:
+            messagebox.showerror("Error", "Could not parse reservation ID.")
+            return None
+
+    def do_check_in():
+        res_id = get_selected_res_id()
+        if res_id is None:
+            return
+        try:
+            res = ooad.check_in(res_id)
+            messagebox.showinfo("Checked In", f"Reservation #{res.res_id} is now CHECKED IN.")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    def do_check_out():
+        res_id = get_selected_res_id()
+        if res_id is None:
+            return
+        try:
+            res = ooad.check_out(res_id)
+            messagebox.showinfo("Checked Out", f"Reservation #{res.res_id} is now CHECKED OUT.")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    def do_cancel():
+        res_id = get_selected_res_id()
+        if res_id is None:
+            return
+        try:
+            res = ooad.cancel_reservation(res_id)
+            messagebox.showinfo("Canceled", f"Reservation #{res.res_id} is now CANCELED.")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    checkin_button = tk.Button(list_frame, text="Check In", command=do_check_in)
+    checkin_button.grid(row=2, column=0, pady=5, sticky="w")
+
+    checkout_button = tk.Button(list_frame, text="Check Out", command=do_check_out)
+    checkout_button.grid(row=2, column=1, pady=5, sticky="w")
+
+    cancel_button = tk.Button(list_frame, text="Cancel", command=do_cancel)
+    cancel_button.grid(row=2, column=2, pady=5, sticky="w")
+
+    # ---------- Report button ----------
+    def show_report():
+        report = Reports(ooad)
+        text = report.expected_occupancy_report()
+        win = tk.Toplevel(root)
+        win.title("Expected Occupancy (30 days)")
+        txt = tk.Text(win, width=80, height=25)
+        txt.pack(padx=10, pady=10)
+        txt.insert("1.0", text)
+        txt.config(state="disabled")
+
+    report_button = tk.Button(list_frame, text="Show Occupancy Report", command=show_report)
+    report_button.grid(row=3, column=0, columnspan=3, pady=10)
+
+    # load initial state
+    refresh_listbox()
+
+    root.mainloop()
+    
 if __name__ == "__main__":
-    # If run with argument "demo", run demo; with "bill", run billing CLI; otherwise show both choices
-    if len(sys.argv) > 1 and sys.argv[1] == "demo":
-        demo_ooad_and_reports()
-    elif len(sys.argv) > 1 and sys.argv[1] == "bill":
-        billing_cli()
+    # If run with argument "demo", run demo; with "bill", run billing CLI; otherwise run GUI
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "demo":
+            demo_ooad_and_reports()
+        elif sys.argv[1] == "bill":
+            billing_cli()
+        elif sys.argv[1] == "gui":
+            run_gui()
+        else:
+            print("Unknown option. Use one of: gui, demo, bill")
     else:
-        print("Run the script with one of the options:")
-        print("  python hotel.py demo   # shows OOAD demo + report")
-        print("  python hotel.py bill   # runs the billing CLI demo")
-        # For convenience run demo by default
-        demo_ooad_and_reports()
+        # Default: open GUI
+        run_gui()
