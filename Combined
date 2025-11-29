@@ -1,0 +1,700 @@
+import tkinter as tk
+import sys
+from tkinter import messagebox
+from datetime import date, timedelta, datetime
+from decimal import Decimal, ROUND_HALF_UP
+
+#defining reservations - Juelz Moore
+
+class Reservation:
+  def __init__(self, res_id, r_type, name, days, arrival, email):
+    self.res_id = res_id
+    self.r_type = r_type ###reservation types SD, C, I, P
+    self.name = name
+    self.days = days
+    self.arrival = arrival
+    self.email = email
+    self.total = Decimal("0.00")
+    self.status = "Active"  #status of reservation - active, checked in, checked out, canceled
+
+#OOAD System Logic
+
+class OOAD:
+  def __init__(self):
+    self.reservations = {}
+    self.next_id = 1
+
+  def date_format(self, s):
+    m, d, y = s.split("/")
+    return date(int(y), int(m), int(d))
+
+  def stay_valid(self, s):
+    return s.isdigit() and 1 <= int(s) <= 14
+
+  def email_valid(self, s):
+    return "@" in s and "." in s and len(s) <= 40
+
+  def res_type(self, r_type):
+    return {
+      "SD": "60-Day",
+      "C": "Conventional",
+      "I": "Incentive",
+      "P": "Prepaid"
+    }.get(r_type, "Unknown")
+
+  def res_price(self, r_type, days):
+    base = Decimal("100")
+
+    if r_type == "SD":
+      return base * days
+    if r_type == "C":
+      return base * days * Decimal("1.10")
+    if r_type == "I":
+      return base * days * Decimal("0.80")
+    if r_type == "P":
+      return base * days * Decimal("0.90")
+
+  def list_reservations(self):
+    return list(self.reservations.values())
+
+  def add_res(self, r_type, form):
+    name = form["name"].strip()
+    days = form["days"]
+    arrival = form["arrival"]
+    email = form["email"]
+
+    if name == "" or len(name) > 35:
+      raise ValueError("Invalid name")
+    if not self.stay_valid(days):
+      raise ValueError("Days must be 1-14")
+    if not self.email_valid(email):
+      raise ValueError("Invalid email")
+
+
+    arrival_date = self.date_format(arrival)
+    days_int = int(days)
+
+    res = Reservation(
+      self.next_id,
+      r_type,
+      name,
+      days_int,
+      arrival_date,
+      email
+    )
+
+    res.total = self.res_price(r_type, days_int)
+    self.reservations[self.next_id] = res
+    self.next_id += 1
+    return res
+
+  def cancel_reservation(self, res_id):
+    res_id = int(res_id)
+    if res_id not in self.reservations:
+      raise ValueError("Reservation not found")
+    self.reservations[res_id].status = "CANCELED"
+    return self.reservations[res_id]
+
+  def check_in(self, res_id):
+    res_id = int(res_id)
+    if res_id not in self.reservations:
+      raise ValueError("Reservation not found")
+
+    res = self.reservations[res_id]
+    if res.status == "CANCELED":
+      raise ValueError("Cannot check in a canceled reservation")
+
+    res.status = "CHECKED IN"
+    return res
+
+  def check_out(self, res_id):
+    res_id = int(res_id)
+    if res_id not in self.reservations:
+      raise ValueError("Reservation not found")
+
+    res = self.reservations[res_id]
+    if res.status != "CHECKED IN":
+      raise ValueError("Must be check in first")
+
+    res.status = "CHECKED OUT"
+    return res
+
+#REPORTS - Jose Guzman
+class Reports:
+    #Inherit Info from OOAD
+    def __init__(self, ooad):
+        self.ooad = ooad
+        self.capacity = 45
+
+    #define expected occupancy report 
+    def expected_occupancy_report(self):
+        start = date.today()
+        days = 30
+
+        #set format and store percentage
+        report_lines = []
+        total_occupancy_percent = 0
+
+        #loop for info within timeframe
+        for i in range(days):
+            current_day = start + timedelta(days=i)
+
+            prepaid = 0
+            sixty_day = 0 
+            conventional = 0
+            incentive = 0
+        
+            #Nested loop for information gathering
+            for res in self.ooad.reservations.values():
+                #If room is not booked continue to next day
+                if res.status != "Active":
+                    continue
+                #Else gather info
+                stay_start = res.arrival
+                stay_end = res.arrival + timedelta(days=res.days)
+
+                if stay_start <= current_day < stay_end:
+                    #Find Reservation type and add
+                    if res.r_type == "P":
+                        prepaid += 1
+                    elif res.r_type == "SD":
+                        sixty_day += 1
+                    elif res.r_type == "C":
+                        conventional += 1
+                    elif res.r_type == "I":
+                        incentive += 1
+
+            #Organize info and formula for occupancy percent        
+            total = prepaid + sixty_day + conventional + incentive
+            occupancy_rate = (total/self.capacity) * 100
+            total_occupancy_percent += occupancy_rate
+
+            #Format to report
+            report_lines.append(
+                f"{current_day} | P:{prepaid} SD:{sixty_day} C:{conventional} "
+                f"I:{incentive} | Total:{total} | {occupancy_rate:.1f}%"
+            )
+        #Loop calc rate and join lines
+        avg_rate = total_occupancy_percent / days
+        report_lines.append(f"\nAverage Expected Occupancy: {avg_rate:.1f}%")
+
+        return "\n".join(report_lines)
+    
+ #Jaheim Patterson Billing Demo 
+   
+def display_rooms():
+    print("\nAvailable Rooms:")
+    print("1. Single Room  - $80 per night")
+    print("2. Double Room  - $120 per night")
+    print("3. Deluxe Room  - $200 per night\n")
+
+def get_room_price(choice: int) -> Decimal:
+    prices = {
+        1: Decimal("80.00"),
+        2: Decimal("120.00"),
+        3: Decimal("200.00")
+    }
+    return prices.get(choice, None)
+
+def calculate_bill(room_price: Decimal, nights: int, discount: Decimal = Decimal("0.00")):
+    subtotal = (room_price * Decimal(nights)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    tax = (subtotal * Decimal("0.10")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)  # 10% tax
+    total = (subtotal + tax - discount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return subtotal, tax, total
+
+def billing_cli():
+    print("===================================")
+    print("      HOTEL BILLING SYSTEM")
+    print("===================================")
+
+    name = input("Enter Guest Name: ").strip()
+    try:
+        nights = int(input("Enter number of nights: ").strip())
+    except ValueError:
+        print("Invalid number of nights")
+        return
+
+    display_rooms()
+    try:
+        room_choice = int(input("Choose a room (1-3): ").strip())
+    except ValueError:
+        print("Invalid choice")
+        return
+
+    price = get_room_price(room_choice)
+    if price is None:
+        print("Invalid room choice!")
+        return
+
+    discount_option = input("Apply discount? (yes/no): ").lower().strip()
+    discount = Decimal("0.00")
+    if discount_option == "yes":
+        try:
+            discount = Decimal(input("Enter discount amount (e.g. 10.00): ").strip())
+        except Exception:
+            print("Invalid discount amount; using 0.00")
+            discount = Decimal("0.00")
+
+    subtotal, tax, total = calculate_bill(price, nights, discount)
+
+    print("\n===================================")
+    print("              BILL")
+    print("===================================")
+    print(f"Guest Name      : {name}")
+    print(f"Nights Stayed   : {nights}")
+    print(f"Room Price      : ${price}")
+    print(f"Subtotal        : ${subtotal:.2f}")
+    print(f"Tax (10%)       : ${tax:.2f}")
+    print(f"Discount        : -${discount:.2f}")
+    print("-----------------------------------")
+    print(f"Total Amount    : ${total:.2f}")
+    print("===================================")
+
+# -------------------------
+# Example usage / small demo
+# -------------------------
+def demo_ooad_and_reports():
+    o = OOAD()
+    # add some sample reservations
+    try:
+        o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
+        o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
+        o.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com"})
+    except ValueError as e:
+        print("Demo add_res error:", e)
+
+    print("\nAll reservations:")
+    for r in o.list_reservations():
+        print(r)
+
+    report = Reports(o)
+    print("\nExpected occupancy (next 7 days):")
+    print(report.expected_occupancy_report()[:7])
+
+def run_gui():
+    ooad = OOAD()
+
+    root = tk.Tk()
+    root.title("Ophelia's Oasis HRS")
+
+    # ---------- Left side: Reservation form ----------
+    form_frame = tk.Frame(root, padx=10, pady=10)
+    form_frame.grid(row=0, column=0, sticky="n")
+
+    tk.Label(form_frame, text="Name:").grid(row=0, column=0, sticky="w")
+    name_entry = tk.Entry(form_frame, width=25)
+    name_entry.grid(row=0, column=1)
+
+    tk.Label(form_frame, text="Days (1–14):").grid(row=1, column=0, sticky="w")
+    days_entry = tk.Entry(form_frame, width=10)
+    days_entry.grid(row=1, column=1, sticky="w")
+
+    tk.Label(form_frame, text="Arrival (MM/DD/YYYY):").grid(row=2, column=0, sticky="w")
+    arrival_entry = tk.Entry(form_frame, width=15)
+    arrival_entry.grid(row=2, column=1, sticky="w")
+
+    tk.Label(form_frame, text="Email:").grid(row=3, column=0, sticky="w")
+    email_entry = tk.Entry(form_frame, width=25)
+    email_entry.grid(row=3, column=1)
+
+    tk.Label(form_frame, text="Type:").grid(row=4, column=0, sticky="w")
+    type_var = tk.StringVar(value="C")
+    type_menu = tk.OptionMenu(form_frame, type_var, "SD", "C", "I", "P")
+    type_menu.grid(row=4, column=1, sticky="w")
+
+    def add_reservation():
+        form = {
+            "name": name_entry.get(),
+            "days": days_entry.get(),
+            "arrival": arrival_entry.get(),
+            "email": email_entry.get()
+        }
+        r_type = type_var.get()
+        try:
+            res = ooad.add_res(r_type, form)
+            messagebox.showinfo("Success", f"Reservation #{res.res_id} created.\nTotal: ${res.total}")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    add_button = tk.Button(form_frame, text="Add Reservation", command=add_reservation)
+    add_button.grid(row=5, column=0, columnspan=2, pady=8)
+
+    # ---------- Right side: Reservation list + actions ----------
+    list_frame = tk.Frame(root, padx=10, pady=10)
+    list_frame.grid(row=0, column=1, sticky="n")
+
+    tk.Label(list_frame, text="Reservations:").grid(row=0, column=0, sticky="w")
+
+    res_listbox = tk.Listbox(list_frame, width=70, height=12)
+    res_listbox.grid(row=1, column=0, columnspan=3)
+
+    def refresh_listbox():
+        res_listbox.delete(0, tk.END)
+        for res in ooad.list_reservations():
+            line = (
+                f"ID {res.res_id} | {res.name} | {res.r_type} | "
+                f"{res.arrival} | {res.days} nights | {res.status}"
+            )
+            res_listbox.insert(tk.END, line)
+
+    def get_selected_res_id():
+        sel = res_listbox.curselection()
+        if not sel:
+            messagebox.showwarning("Select", "Please select a reservation first.")
+            return None
+        line = res_listbox.get(sel[0])
+        # line starts with "ID X | ..."
+        try:
+            parts = line.split()
+            return int(parts[1])
+        except Exception:
+            messagebox.showerror("Error", "Could not parse reservation ID.")
+            return None
+
+    def do_check_in():
+        res_id = get_selected_res_id()
+        if res_id is None:
+            return
+        try:
+            res = ooad.check_in(res_id)
+            messagebox.showinfo("Checked In", f"Reservation #{res.res_id} is now CHECKED IN.")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    def do_check_out():
+        res_id = get_selected_res_id()
+        if res_id is None:
+            return
+        try:
+            res = ooad.check_out(res_id)
+            messagebox.showinfo("Checked Out", f"Reservation #{res.res_id} is now CHECKED OUT.")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    def do_cancel():
+        res_id = get_selected_res_id()
+        if res_id is None:
+            return
+        try:
+            res = ooad.cancel_reservation(res_id)
+            messagebox.showinfo("Canceled", f"Reservation #{res.res_id} is now CANCELED.")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    checkin_button = tk.Button(list_frame, text="Check In", command=do_check_in)
+    checkin_button.grid(row=2, column=0, pady=5, sticky="w")
+
+    checkout_button = tk.Button(list_frame, text="Check Out", command=do_check_out)
+    checkout_button.grid(row=2, column=1, pady=5, sticky="w")
+
+    cancel_button = tk.Button(list_frame, text="Cancel", command=do_cancel)
+    cancel_button.grid(row=2, column=2, pady=5, sticky="w")
+
+    # ---------- Report button ----------
+    def show_report():
+        report = Reports(ooad)
+        text = report.expected_occupancy_report()
+        win = tk.Toplevel(root)
+        win.title("Expected Occupancy (30 days)")
+        txt = tk.Text(win, width=80, height=25)
+        txt.pack(padx=10, pady=10)
+        txt.insert("1.0", text)
+        txt.config(state="disabled")
+
+    report_button = tk.Button(list_frame, text="Show Occupancy Report", command=show_report)
+    report_button.grid(row=3, column=0, columnspan=3, pady=10)
+
+    # load initial state
+    refresh_listbox()
+
+    root.mainloop()
+    
+
+
+# START - LOG FILE FEATURE 
+
+
+def log_action(action_type, room_number=None, guest_name=None, extra_info=None, log_file="hotel_log.txt"):
+    """
+    Appends a log entry to the hotel log file with a timestamp.
+
+    Parameters:
+        action_type (str): The type of action (e.g., CHECK_IN, CHECK_OUT, ERROR)
+        room_number (int, optional): Room number involved in the action
+        guest_name (str, optional): Guest involved in the action
+        extra_info (str, optional): Additional notes
+        log_file (str): File path of log file
+
+    Returns:
+        None
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    log_entry = f"{timestamp} | {action_type}"
+    if room_number is not None:
+        log_entry += f" | Room: {room_number}"
+    if guest_name is not None:
+        log_entry += f" | Guest: {guest_name}"
+    if extra_info is not None:
+        log_entry += f" | Notes: {extra_info}"
+
+    with open(log_file, "a") as file:
+        file.write(log_entry + "\n")
+
+    print(f"[Logged: {action_type}]")
+
+# END - LOG FILE FEATURE
+
+
+
+
+
+# VERIFY ROOM AVAILABILITY FEATURE
+
+def is_room_available_for_dates(room_number, check_in_date, check_out_date, rooms_data):
+    """
+    Checks if a room is available for specific dates by comparing against
+    existing reservations in rooms_data.
+    
+    Expected rooms_data format:
+        {
+            'rooms': {
+                101: {
+                    'type': 'Single',
+                    'price_per_night': 80,
+                    'status': 'available',
+                    'current_guest': None,
+                    'reservations': [
+                        {
+                            'guest_name': 'John',
+                            'check_in_date': '2024-01-15',
+                            'check_out_date': '2024-01-18',
+                            'checked_in': False
+                        },
+                        ...
+                    ]
+                },
+                ...
+            }
+        }
+    """
+    if room_number not in rooms_data["rooms"]:
+        return False
+
+    room = rooms_data["rooms"][room_number]
+
+    for reservation in room["reservations"]:
+        res_check_in = datetime.strptime(reservation["check_in_date"], "%Y-%m-%d")
+        res_check_out = datetime.strptime(reservation["check_out_date"], "%Y-%m-%d")
+
+        # Overlap check: start1 < end2 and start2 < end1
+        if check_in_date < res_check_out and res_check_in < check_out_date:
+            return False
+
+    return True
+
+
+def verify_room_availability(rooms_data):
+    """
+    Asks for room number + date range and reports if the room is available.
+    Uses is_room_available_for_dates() to perform the logic.
+    
+    NOTE: This is a console-based helper function that expects rooms_data
+    in the format described above. It does not interact with the Tkinter GUI.
+    """
+    print("\n--- Verify Room Availability (Console) ---")
+    print("Available rooms:", list(rooms_data["rooms"].keys()))
+
+    try:
+        room_number = int(input("Enter room number: "))
+    except ValueError:
+        print("Error: Please enter a valid room number.")
+        log_action("ERROR", extra_info="Invalid room number entered for availability check")
+        return
+
+    if room_number not in rooms_data["rooms"]:
+        print(f"Error: Room {room_number} does not exist.")
+        log_action("ERROR", room_number=room_number, extra_info="Room not found")
+        return
+
+    print("Enter dates in format YYYY-MM-DD (e.g., 2024-01-15)")
+    check_in_str = input("Check-in date: ")
+    check_out_str = input("Check-out date: ")
+
+    try:
+        check_in_date = datetime.strptime(check_in_str, "%Y-%m-%d")
+        check_out_date = datetime.strptime(check_out_str, "%Y-%m-%d")
+    except ValueError:
+        print("Error: Invalid date format.")
+        log_action("ERROR", room_number=room_number, extra_info="Invalid date format")
+        return
+
+    if check_in_date >= check_out_date:
+        print("Error: Check-out must be after check-in.")
+        log_action("ERROR", room_number=room_number, extra_info="Check-out before check-in")
+        return
+
+    if is_room_available_for_dates(room_number, check_in_date, check_out_date, rooms_data):
+        room = rooms_data["rooms"][room_number]
+        nights = (check_out_date - check_in_date).days
+        print(f"Room {room_number} is AVAILABLE")
+        print(f"Total cost for {nights} nights: ${room['price_per_night'] * nights}")
+        log_action("AVAILABILITY_CHECK", room_number=room_number,
+                   extra_info=f"Available for {check_in_str} to {check_out_str}")
+    else:
+        print(f"Room {room_number} is NOT AVAILABLE for those dates.")
+        log_action("AVAILABILITY_CHECK", room_number=room_number,
+                   extra_info=f"Not available for {check_in_str} to {check_out_str}")
+
+# VERIFY ROOM AVAILABILITY FEATURE 
+
+
+
+
+# CHECK-IN GUEST FEATURE 
+
+def check_in_guest(rooms_data):
+    """
+    Console-based check-in function that:
+    - Asks for guest name and room number
+    - Verifies a matching reservation exists and is not already checked in
+    - Updates the room status to 'occupied'
+    - Logs the action using log_action()
+    
+    NOTE: This uses the rooms_data structure shown above and is
+    separate from the Tkinter GUI logic in this file.
+    """
+    print("\n--- Check In Guest (Console) ---")
+
+    guest_name = input("Enter guest name: ").strip()
+    if not guest_name:
+        print("Error: Guest name cannot be empty.")
+        log_action("ERROR", extra_info="Empty guest name for check-in")
+        return
+
+    try:
+        room_number = int(input("Enter room number: "))
+    except ValueError:
+        print("Error: Please enter a valid room number.")
+        log_action("ERROR", guest_name=guest_name, extra_info="Invalid room number for check-in")
+        return
+
+    if room_number not in rooms_data["rooms"]:
+        print(f"Error: Room {room_number} does not exist.")
+        log_action("ERROR", room_number=room_number, guest_name=guest_name,
+                   extra_info="Room not found for check-in")
+        return
+
+    room = rooms_data["rooms"][room_number]
+
+    if room["status"] == "occupied":
+        print(f"Error: Room {room_number} is already occupied by {room['current_guest']}.")
+        log_action("CHECK_IN_FAILED", room_number=room_number, guest_name=guest_name,
+                   extra_info="Room already occupied")
+        return
+
+    reservation_found = None
+    for reservation in room["reservations"]:
+        if reservation["guest_name"].lower() == guest_name.lower() and not reservation["checked_in"]:
+            reservation_found = reservation
+            break
+
+    if reservation_found is None:
+        print(f"No reservation found for {guest_name} in room {room_number}.")
+        log_action("CHECK_IN_FAILED", room_number=room_number, guest_name=guest_name,
+                   extra_info="No matching reservation")
+        return
+
+    reservation_found["checked_in"] = True
+    room["status"] = "occupied"
+    room["current_guest"] = guest_name
+
+    print(f"Check-in successful! Guest: {guest_name}, Room: {room_number}")
+    log_action("CHECK_IN", room_number=room_number, guest_name=guest_name,
+               extra_info=f"Check-out: {reservation_found['check_out_date']}")
+
+# CHECK-IN GUEST FEATURE
+
+
+
+
+
+# CHECK-OUT GUEST FEATURE 
+
+
+def check_out_guest(rooms_data):
+    """
+    Console-based check-out function that:
+    - Asks for room number
+    - Verifies the room is occupied
+    - Calculates the bill based on stored reservation dates and price
+    - Sets the room back to 'available'
+    - Logs the action using log_action()
+    
+    NOTE: This uses the rooms_data structure shown above and is
+    separate from the Tkinter GUI logic in this file.
+    """
+    print("\n--- Check Out Guest (Console) ---")
+
+    try:
+        room_number = int(input("Enter room number: "))
+    except ValueError:
+        print("Error: Invalid room number.")
+        log_action("ERROR", extra_info="Invalid room number for check-out")
+        return
+
+    if room_number not in rooms_data["rooms"]:
+        print(f"Room {room_number} does not exist.")
+        log_action("ERROR", room_number=room_number, extra_info="Room not found for check-out")
+        return
+
+    room = rooms_data["rooms"][room_number]
+
+    if room["status"] != "occupied":
+        print(f"Room {room_number} is not currently occupied.")
+        log_action("CHECK_OUT_FAILED", room_number=room_number, extra_info="Room not occupied")
+        return
+
+    guest_name = room["current_guest"]
+
+    for i, reservation in enumerate(room["reservations"]):
+        if reservation["guest_name"].lower() == guest_name.lower() and reservation["checked_in"]:
+            check_in = datetime.strptime(reservation["check_in_date"], "%Y-%m-%d")
+            check_out = datetime.strptime(reservation["check_out_date"], "%Y-%m-%d")
+            nights = (check_out - check_in).days
+            total_bill = nights * room["price_per_night"]
+            room["reservations"].pop(i)
+            break
+    else:
+        nights = 1
+        total_bill = room["price_per_night"]
+
+    room["status"] = "available"
+    room["current_guest"] = None
+
+    print(f"Check-out successful! Guest: {guest_name}, Total: ${total_bill}")
+    log_action("CHECK_OUT", room_number=room_number, guest_name=guest_name,
+               extra_info=f"Bill: ${total_bill}")
+
+# END - CHECK-OUT GUEST FEATURE
+
+
+
+if __name__ == "__main__":
+    # If run with argument "demo", run demo; with "bill", run billing CLI; otherwise run GUI
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "demo":
+            demo_ooad_and_reports()
+        elif sys.argv[1] == "bill":
+            billing_cli()
+        elif sys.argv[1] == "gui":
+            run_gui()
+        else:
+            print("Unknown option. Use one of: gui, demo, bill")
+    else:
+        # Default: open GUI
+        run_gui()
