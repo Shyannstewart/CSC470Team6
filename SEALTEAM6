@@ -174,11 +174,174 @@ class Reports:
                 f"{current_day} | P:{prepaid} SD:{sixty_day} C:{conventional} "
                 f"I:{incentive} | Total:{total} | {occupancy_rate:.1f}%"
             )
+
         #Loop calc rate and join lines
         avg_rate = total_occupancy_percent / days
         report_lines.append(f"\nAverage Expected Occupancy: {avg_rate:.1f}%")
 
         return "\n".join(report_lines)
+    
+    #Define expected income report
+    def expected_income_report(self):
+        start = date.today()
+        days = 30
+
+        report_lines = []
+        total_income = Decimal("0.00")
+
+        for i in range(days):
+            current_day = start + timedelta(days=i)
+            day_income = Decimal("0.00")
+
+            for res in self.ooad.reservations.values():
+                if res.status != "Active":
+                    continue
+
+                stay_start = res.arrival
+                stay_end = res.arrival + timedelta(days=res.days)
+
+                #Check if reservation is active
+                if stay_start <= current_day < stay_end:
+                    nightly = self.ooad.res_price(res.r_type, 1)
+                    day_income += nightly
+
+            report_lines.append(f"{current_day} | ${day_income:.2f}")
+            total_income += day_income
+    
+        avg_income = total_income / days
+        report_lines.append(f"\nTotal Expected Income: ${total_income:.2f}")
+        report_lines.append(f"Average Nightly Income: ${avg_income:.2f}")
+
+        return "\n".join(report_lines)
+
+    #Define incentive report 
+    def incentive_discount_report(self):
+        start = date.today()
+        days = 30
+
+        report_lines = []
+        total_discount = Decimal("0.00")
+
+        for i in range(days):
+            current_day = start + timedelta(days=i)
+            nightly_loss = Decimal("0.00")
+
+            for res in self.ooad.reservations.values():
+                if res.status != "Active":
+                    continue
+
+                stay_start = res.arrival
+                stay_end = res.arrival + timedelta(days=res.days)
+
+                if stay_start <= current_day < stay_end and res.r_type == "I":
+                    full_rate = self.ooad.res_price("C", 1)
+                    incentive_rate = self.ooad.res_price("I", 1)
+                    nightly_loss += (full_rate - incentive_rate)
+
+            report_lines.append(f"{current_day} | ${nightly_loss:.2f}")
+            total_discount += nightly_loss
+
+        avg_discount = total_discount / days
+        report_lines.append(f"\nTotal Incentive Discount: ${total_discount:.2f}")
+        report_lines.append(f"Average Incentive Discount: ${avg_discount:.2f}")
+
+        return "\n".join(report_lines)
+
+    #Daily Arrivals Report
+    def daily_arrivals_report(self, target_day=None):
+        if target_day is None:
+            target_day = date.today()
+
+        arrivals = []
+
+        for res in self.ooad.reservations.values():
+            if res.status != "Active":
+                continue
+
+            if res.arrival == target_day:
+                departure = res.arrival + timedelta(days=res.days)
+                room_number = 100 + res.res_id
+                arrivals.append((res.name, res.r_type, room_number, departure))
+
+        arrivals.sort(key=lambda x: x[0])  # sort by guest name
+
+        report_lines = [f"Arrivals Report for {target_day}:\n"]
+
+        if not arrivals:
+            report_lines.append("No expected arrivals today.")
+        else:
+            for name, rtype, room, dep in arrivals:
+                report_lines.append(
+                    f"{name} | Type:{rtype} | Room {room} | Departs {dep}"
+                )
+
+        return "\n".join(report_lines)
+
+    #Daily occupancy report 
+    def daily_occupancy_report(self, target_day=None):
+        if target_day is None:
+            target_day = date.today()
+
+        occupants = []
+
+        for res in self.ooad.reservations.values():
+            if res.status not in ("Active", "CHECKED IN"):
+                continue
+
+            stay_start = res.arrival
+            stay_end = res.arrival + timedelta(days=res.days)
+
+            if stay_start <= target_day < stay_end:
+                room_number = 100 + res.res_id
+                departure = stay_end
+                name = res.name
+
+                # mark departure
+                if target_day == stay_end:
+                    name = "*" + name
+
+                occupants.append((room_number, name, departure))
+
+        occupants.sort(key=lambda x: x[0])
+
+        report_lines = [f"Occupancy Report for {target_day}:\n"]
+
+        if not occupants:
+            report_lines.append("No occupied rooms today.")
+        else:
+            for room, name, dep_date in occupants:
+                report_lines.append(f"Room {room} | {name} | Departs {dep_date}")
+
+        return "\n".join(report_lines)
+
+    #Accomodation bill
+    def print_bill(self, res_id):
+        res = self.ooad.reservations.get(res_id)
+        if not res:
+            raise ValueError("Reservation not found")
+
+        today = date.today()
+        arrival = res.arrival
+        departure = res.arrival + timedelta(days=res.days)
+        nights = res.days
+        room = getattr(res, "room", "UNASSIGNED")
+        total = res.total
+
+        lines = []
+        lines.append(f"Accommodation Bill — Printed {today}")
+        lines.append("--------------------------------------")
+        lines.append(f"Guest Name: {res.name}")
+        lines.append(f"Room Number: {room}")
+        lines.append(f"Arrival Date: {arrival}")
+        lines.append(f"Departure Date: {departure}")
+        lines.append(f"Nights: {nights}")
+        lines.append(f"Total Charge: ${total:.2f}")
+
+        if res.r_type in ("P", "SD"):
+            lines.append(f"\nPaid in Advance: {res.paid_date}")
+            lines.append(f"Amount Paid: ${total:.2f}")
+
+        return "\n".join(lines)
     
  #Jaheim Patterson Billing Demo 
    
