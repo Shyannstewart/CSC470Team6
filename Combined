@@ -7,13 +7,15 @@ from decimal import Decimal, ROUND_HALF_UP
 #defining reservations - Juelz Moore
 
 class Reservation:
-  def __init__(self, res_id, r_type, name, days, arrival, email):
+  def __init__(self, res_id, r_type, name, days, arrival, email, address="", phone=""):
     self.res_id = res_id
     self.r_type = r_type ###reservation types SD, C, I, P
     self.name = name
     self.days = days
     self.arrival = arrival
     self.email = email
+    self.address = address
+    self.phone = phone
     self.total = Decimal("0.00")
     self.status = "Active"  #status of reservation - active, checked in, checked out, canceled
 
@@ -61,7 +63,9 @@ class OOAD:
     name = form["name"].strip()
     days = form["days"]
     arrival = form["arrival"]
-    email = form["email"]
+    email = form["email"].strip()
+    address = form.get("address", "").strip()
+    phone = form.get("phone", "").strip()
 
     if name == "" or len(name) > 35:
       raise ValueError("Invalid name")
@@ -70,6 +74,18 @@ class OOAD:
     if not self.email_valid(email):
       raise ValueError("Invalid email")
 
+    if address == "":
+      raise ValueError("Address is required")
+    if len(address) > 75:
+      raise ValueError("Address must be 75 characters or less")
+    addr_parts = [p.strip() for p in address.split(",")]
+    if len(addr_parts) != 4 or any(not p for p in addr_parts):
+      raise ValueError("Address must be in 'Street, City, State, ZIP' format")
+
+    if phone == "":
+      raise ValueError("Phone number is required")
+    if len(phone) > 15:
+      raise ValueError("Phone number must be 15 characters or less")
 
     arrival_date = self.date_format(arrival)
     days_int = int(days)
@@ -80,7 +96,9 @@ class OOAD:
       name,
       days_int,
       arrival_date,
-      email
+      email,
+      address,
+      phone
     )
 
     res.total = self.res_price(r_type, days_int)
@@ -117,6 +135,63 @@ class OOAD:
       raise ValueError("Must be check in first")
 
     res.status = "CHECKED OUT"
+    return res
+
+  def update_reservation(self, res_id, updates):
+    res_id = int(res_id)
+    if res_id not in self.reservations:
+      raise ValueError("Reservation not found")
+
+    res = self.reservations[res_id]
+
+    if "name" in updates:
+      name = updates["name"].strip()
+      if name == "" or len(name) > 35:
+        raise ValueError("Invalid name")
+      res.name = name
+
+    if "days" in updates:
+      days_str = updates["days"]
+      if not self.stay_valid(days_str):
+        raise ValueError("Days must be 1-14")
+      res.days = int(days_str)
+
+    if "arrival" in updates:
+      arrival_str = updates["arrival"]
+      res.arrival = self.date_format(arrival_str)
+
+    if "email" in updates:
+      email = updates["email"].strip()
+      if not self.email_valid(email):
+        raise ValueError("Invalid email")
+      res.email = email
+
+    if "address" in updates:
+      address = updates["address"].strip()
+      if address == "":
+        raise ValueError("Address is required")
+      if len(address) > 75:
+        raise ValueError("Address must be 75 characters or less")
+      addr_parts = [p.strip() for p in address.split(",")]
+      if len(addr_parts) != 4 or any(not p for p in addr_parts):
+        raise ValueError("Address must be in 'Street, City, State, ZIP' format")
+      res.address = address
+
+    if "phone" in updates:
+      phone = updates["phone"].strip()
+      if phone == "":
+        raise ValueError("Phone number is required")
+      if len(phone) > 15:
+        raise ValueError("Phone number must be 15 characters or less")
+      res.phone = phone
+
+    if "r_type" in updates:
+      r_type = updates["r_type"]
+      if r_type not in ["SD", "C", "I", "P"]:
+        raise ValueError("Invalid reservation type")
+      res.r_type = r_type
+
+    res.total = self.res_price(res.r_type, res.days)
     return res
 
 #REPORTS - Jose Guzman
@@ -257,9 +332,9 @@ def demo_ooad_and_reports():
     o = OOAD()
     # add some sample reservations
     try:
-        o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
-        o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
-        o.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com"})
+        o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com", "address": "123 Main St, Fayetteville, NC, 28301", "phone": "9105551234"})
+        o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com", "address": "456 Oak Rd, Raleigh, NC, 27601", "phone": "9195559876"})
+        o.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com", "address": "789 Pine Ave, Durham, NC, 27701", "phone": "9845554321"})
     except ValueError as e:
         print("Demo add_res error:", e)
 
@@ -297,17 +372,28 @@ def run_gui():
     email_entry = tk.Entry(form_frame, width=25)
     email_entry.grid(row=3, column=1)
 
-    tk.Label(form_frame, text="Type:").grid(row=4, column=0, sticky="w")
+    # Address and phone section
+    tk.Label(form_frame, text="Address (Street, City, State, ZIP):").grid(row=4, column=0, sticky="w")
+    address_entry = tk.Entry(form_frame, width=35)
+    address_entry.grid(row=4, column=1)
+
+    tk.Label(form_frame, text="Phone:").grid(row=5, column=0, sticky="w")
+    phone_entry = tk.Entry(form_frame, width=20)
+    phone_entry.grid(row=5, column=1)
+
+    tk.Label(form_frame, text="Type:").grid(row=6, column=0, sticky="w")
     type_var = tk.StringVar(value="C")
     type_menu = tk.OptionMenu(form_frame, type_var, "SD", "C", "I", "P")
-    type_menu.grid(row=4, column=1, sticky="w")
+    type_menu.grid(row=6, column=1, sticky="w")
 
     def add_reservation():
         form = {
             "name": name_entry.get(),
             "days": days_entry.get(),
             "arrival": arrival_entry.get(),
-            "email": email_entry.get()
+            "email": email_entry.get(),
+            "address": address_entry.get(),
+            "phone": phone_entry.get()
         }
         r_type = type_var.get()
         try:
@@ -318,7 +404,62 @@ def run_gui():
             messagebox.showerror("Error", str(e))
 
     add_button = tk.Button(form_frame, text="Add Reservation", command=add_reservation)
-    add_button.grid(row=5, column=0, columnspan=2, pady=8)
+    add_button.grid(row=7, column=0, columnspan=2, pady=8)
+
+    # Update reservation section
+    tk.Label(form_frame, text="Update by Reservation ID (max 9 digits):").grid(row=8, column=0, sticky="w")
+    update_id_entry = tk.Entry(form_frame, width=15)
+    update_id_entry.grid(row=8, column=1, sticky="w")
+
+    def update_reservation_gui():
+        res_id_str = update_id_entry.get().strip()
+        if not res_id_str.isdigit() or len(res_id_str) > 9:
+            messagebox.showerror("Error", "Reservation ID must be up to 9 digits.")
+            return
+
+        updates = {}
+
+        name = name_entry.get().strip()
+        if name != "":
+            updates["name"] = name
+
+        days = days_entry.get().strip()
+        if days != "":
+            updates["days"] = days
+
+        arrival = arrival_entry.get().strip()
+        if arrival != "":
+            updates["arrival"] = arrival
+
+        email = email_entry.get().strip()
+        if email != "":
+            updates["email"] = email
+
+        address = address_entry.get().strip()
+        if address != "":
+            updates["address"] = address
+
+        phone = phone_entry.get().strip()
+        if phone != "":
+            updates["phone"] = phone
+
+        r_type_new = type_var.get().strip()
+        if r_type_new != "":
+            updates["r_type"] = r_type_new
+
+        if not updates:
+            messagebox.showwarning("No Changes", "Enter at least one field to update.")
+            return
+
+        try:
+            res = ooad.update_reservation(res_id_str, updates)
+            messagebox.showinfo("Updated", f"Reservation #{res.res_id} updated successfully.")
+            refresh_listbox()
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    update_button = tk.Button(form_frame, text="Update Reservation", command=update_reservation_gui)
+    update_button.grid(row=9, column=0, columnspan=2, pady=6)
 
     # ---------- Right side: Reservation list + actions ----------
     list_frame = tk.Frame(root, padx=10, pady=10)
@@ -344,7 +485,6 @@ def run_gui():
             messagebox.showwarning("Select", "Please select a reservation first.")
             return None
         line = res_listbox.get(sel[0])
-        # line starts with "ID X | ..."
         try:
             parts = line.split()
             return int(parts[1])
@@ -392,9 +532,8 @@ def run_gui():
     checkout_button.grid(row=2, column=1, pady=5, sticky="w")
 
     cancel_button = tk.Button(list_frame, text="Cancel", command=do_cancel)
-    cancel_button.grid(row=2, column=2, pady=5, sticky="w")
+    cancel_button.grid(row=2, column=2, pady=5)
 
-    # ---------- Report button ----------
     def show_report():
         report = Reports(ooad)
         text = report.expected_occupancy_report()
@@ -408,7 +547,6 @@ def run_gui():
     report_button = tk.Button(list_frame, text="Show Occupancy Report", command=show_report)
     report_button.grid(row=3, column=0, columnspan=3, pady=10)
 
-    # ---------- Check Availability button ----------
     def check_availability():
         win = tk.Toplevel(root)
         win.title("Check Room Availability")
@@ -492,30 +630,12 @@ def run_gui():
     availability_button = tk.Button(list_frame, text="Check Availability", command=check_availability)
     availability_button.grid(row=4, column=0, columnspan=3, pady=5)
 
-    # load initial state
     refresh_listbox()
-
     root.mainloop()
     
 
 
-# START - LOG FILE FEATURE 
-
-
 def log_action(action_type, room_number=None, guest_name=None, extra_info=None, log_file="hotel_log.txt"):
-    """
-    Appends a log entry to the hotel log file with a timestamp.
-
-    Parameters:
-        action_type (str): The type of action (e.g., CHECK_IN, CHECK_OUT, ERROR)
-        room_number (int, optional): Room number involved in the action
-        guest_name (str, optional): Guest involved in the action
-        extra_info (str, optional): Additional notes
-        log_file (str): File path of log file
-
-    Returns:
-        None
-    """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     log_entry = f"{timestamp} | {action_type}"
@@ -531,41 +651,8 @@ def log_action(action_type, room_number=None, guest_name=None, extra_info=None, 
 
     print(f"[Logged: {action_type}]")
 
-# END - LOG FILE FEATURE
-
-
-
-
-
-# VERIFY ROOM AVAILABILITY FEATURE
 
 def is_room_available_for_dates(room_number, check_in_date, check_out_date, rooms_data):
-    """
-    Checks if a room is available for specific dates by comparing against
-    existing reservations in rooms_data.
-    
-    Expected rooms_data format:
-        {
-            'rooms': {
-                101: {
-                    'type': 'Single',
-                    'price_per_night': 80,
-                    'status': 'available',
-                    'current_guest': None,
-                    'reservations': [
-                        {
-                            'guest_name': 'John',
-                            'check_in_date': '2024-01-15',
-                            'check_out_date': '2024-01-18',
-                            'checked_in': False
-                        },
-                        ...
-                    ]
-                },
-                ...
-            }
-        }
-    """
     if room_number not in rooms_data["rooms"]:
         return False
 
@@ -575,7 +662,6 @@ def is_room_available_for_dates(room_number, check_in_date, check_out_date, room
         res_check_in = datetime.strptime(reservation["check_in_date"], "%Y-%m-%d")
         res_check_out = datetime.strptime(reservation["check_out_date"], "%Y-%m-%d")
 
-        # Overlap check: start1 < end2 and start2 < end1
         if check_in_date < res_check_out and res_check_in < check_out_date:
             return False
 
@@ -583,13 +669,6 @@ def is_room_available_for_dates(room_number, check_in_date, check_out_date, room
 
 
 def verify_room_availability(rooms_data):
-    """
-    Asks for room number + date range and reports if the room is available.
-    Uses is_room_available_for_dates() to perform the logic.
-    
-    NOTE: This is a console-based helper function that expects rooms_data
-    in the format described above. It does not interact with the Tkinter GUI.
-    """
     print("\n--- Verify Room Availability (Console) ---")
     print("Available rooms:", list(rooms_data["rooms"].keys()))
 
@@ -634,24 +713,8 @@ def verify_room_availability(rooms_data):
         log_action("AVAILABILITY_CHECK", room_number=room_number,
                    extra_info=f"Not available for {check_in_str} to {check_out_str}")
 
-# VERIFY ROOM AVAILABILITY FEATURE 
-
-
-
-
-# CHECK-IN GUEST FEATURE 
 
 def check_in_guest(rooms_data):
-    """
-    Console-based check-in function that:
-    - Asks for guest name and room number
-    - Verifies a matching reservation exists and is not already checked in
-    - Updates the room status to 'occupied'
-    - Logs the action using log_action()
-    
-    NOTE: This uses the rooms_data structure shown above and is
-    separate from the Tkinter GUI logic in this file.
-    """
     print("\n--- Check In Guest (Console) ---")
 
     guest_name = input("Enter guest name: ").strip()
@@ -701,27 +764,8 @@ def check_in_guest(rooms_data):
     log_action("CHECK_IN", room_number=room_number, guest_name=guest_name,
                extra_info=f"Check-out: {reservation_found['check_out_date']}")
 
-# CHECK-IN GUEST FEATURE
-
-
-
-
-
-# CHECK-OUT GUEST FEATURE 
-
 
 def check_out_guest(rooms_data):
-    """
-    Console-based check-out function that:
-    - Asks for room number
-    - Verifies the room is occupied
-    - Calculates the bill based on stored reservation dates and price
-    - Sets the room back to 'available'
-    - Logs the action using log_action()
-    
-    NOTE: This uses the rooms_data structure shown above and is
-    separate from the Tkinter GUI logic in this file.
-    """
     print("\n--- Check Out Guest (Console) ---")
 
     try:
@@ -763,9 +807,6 @@ def check_out_guest(rooms_data):
     print(f"Check-out successful! Guest: {guest_name}, Total: ${total_bill}")
     log_action("CHECK_OUT", room_number=room_number, guest_name=guest_name,
                extra_info=f"Bill: ${total_bill}")
-
-# END - CHECK-OUT GUEST FEATURE
-
 
 
 if __name__ == "__main__":
