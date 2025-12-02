@@ -1,1 +1,37 @@
+Team Contribution Log
+CSC 470 Team 6
+
+This log file summarizes each team member’s contributions to the Hotel Management System project.  
+Total contribution across the group equals 100%.
+
+------------------------------------------------------------
+
+Shy – 25%
+• Implemented the Check-In Guest feature (validates room, checks occupancy, updates room data)
+• Implemented the Check-Out Guest feature (verifies current guest, clears data, resets room status)
+• Implemented the Verify Room Availability feature (returns availability status for any room)
+• Created the team contribution log file for submission
+
+Jaheim – 20%
+• Implemented the Billing feature
+• Assisted with reviewing overall system functionality
+• Assisted with basic GUI adjustments
+
+Jose Guzman – 15%
+• Implemented the Reports feature
+• Worked on integrating UI buttons and indenting code sections
+• Helped with minor GUI edits
+
+Juelz Moore – 30%
+• Implemented the Reservations feature
+• Developed the core System Logic
+• Worked on the GUI (partial implementation)
+
+Jacob – 10%
+• Assisted with reviewing the project
+• Helped identify remaining tasks
+• Contribution limited due to scheduling constraints
+
+------------------------------------------------------------
+Total Contribution: 100%
 
