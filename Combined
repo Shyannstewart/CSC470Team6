@@ -710,8 +710,8 @@ def run_gui():
       txt.insert("1.0", text)
       txt.config(state="disabled")
 
-  income_button = tk.Button(list_frame, text="Show Income Report", command=show_income_report)
-  income_button.grid(row=4, column=0, columnspan=3, pady=10)
+    income_button = tk.Button(list_frame, text="Show Income Report", command=show_income_report)
+    income_button.grid(row=4, column=0, columnspan=3, pady=10)
 
     def show_expected_occupancy():
       report = Reports(ooad)
@@ -725,8 +725,8 @@ def run_gui():
       txt.insert("1.0", text)
       txt.config(state="disabled")
 
-  occ_button = tk.Button(list_frame, text="Show Expected Occupancy", command=show_expected_occupancy)
-  occ_button.grid(row=9, column=0, columnspan=3, pady=10)
+    occ_button = tk.Button(list_frame, text="Show Expected Occupancy", command=show_expected_occupancy)
+    occ_button.grid(row=9, column=0, columnspan=3, pady=10)
 
 
 
@@ -742,8 +742,8 @@ def run_gui():
       txt.insert("1.0", text)
       txt.config(state="disabled")
 
-  incentive_button = tk.Button(list_frame, text="Show Incentive Report", command=show_incentive_report)
-  incentive_button.grid(row=5, column=0, columnspan=3, pady=10)
+    incentive_button = tk.Button(list_frame, text="Show Incentive Report", command=show_incentive_report)
+    incentive_button.grid(row=5, column=0, columnspan=3, pady=10)
 
 
     def show_arrivals_report():
@@ -758,8 +758,8 @@ def run_gui():
       txt.insert("1.0", text)
       txt.config(state="disabled")
 
-  arrivals_button = tk.Button(list_frame, text="Show Arrivals Report", command=show_arrivals_report)
-  arrivals_button.grid(row=6, column=0, columnspan=3, pady=10)
+    arrivals_button = tk.Button(list_frame, text="Show Arrivals Report", command=show_arrivals_report)
+    arrivals_button.grid(row=6, column=0, columnspan=3, pady=10)
 
 
     def show_daily_occupancy():
@@ -774,8 +774,8 @@ def run_gui():
       txt.insert("1.0", text)
       txt.config(state="disabled")
 
-  daily_occ_button = tk.Button(list_frame, text="Show Daily Occupancy", command=show_daily_occupancy)
-  daily_occ_button.grid(row=7, column=0, columnspan=3, pady=10)
+    daily_occ_button = tk.Button(list_frame, text="Show Daily Occupancy", command=show_daily_occupancy)
+    daily_occ_button.grid(row=7, column=0, columnspan=3, pady=10)
 
 
     def show_bill_window():
@@ -786,7 +786,7 @@ def run_gui():
       entry = tk.Entry(bill_win)
       entry.grid(row=0, column=1, padx=10, pady=10)
 
-    def generate_bill():
+      def generate_bill():
         res_id = int(entry.get())
         report = Reports(ooad)
         text = report.print_bill(res_id)
@@ -799,11 +799,11 @@ def run_gui():
         txt.insert("1.0", text)
         txt.config(state="disabled")
 
-    gen_button = tk.Button(bill_win, text="Generate Bill", command=generate_bill)
-    gen_button.grid(row=1, column=0, columnspan=2, pady=10)
+      gen_button = tk.Button(bill_win, text="Generate Bill", command=generate_bill)
+      gen_button.grid(row=1, column=0, columnspan=2, pady=10)
 
-    bill_button = tk.Button(list_frame, text="Print Accommodation Bill", command=show_bill_window)
-    bill_button.grid(row=8, column=0, columnspan=3, pady=10)
+      bill_button = tk.Button(list_frame, text="Print Accommodation Bill", command=show_bill_window)
+      bill_button.grid(row=8, column=0, columnspan=3, pady=10)
 
 
 
