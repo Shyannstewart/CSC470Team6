@@ -1,160 +1,165 @@
-import tkinter as tk
 import sys
-from tkinter import messagebox
+import re
+import uuid
+import datetime as dt
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from cryptography.fernet import Fernet
 
 #defining reservations - Juelz Moore
 
+# -*- coding: utf-8 -*-
+"""
+Fixed and cleaned hotel management + credit-card demo GUI.
+
+Created/Updated: 2025-12-01
+"""
+
+# -------------------------
+# Data model
+# -------------------------
 class Reservation:
-  def __init__(self, res_id, r_type, name, days, arrival, email):
-    self.res_id = res_id
-    self.r_type = r_type ###reservation types SD, C, I, P
-    self.name = name
-    self.days = days
-    self.arrival = arrival
-    self.email = email
-    self.total = Decimal("0.00")
-    self.status = "Active"  #status of reservation - active, checked in, checked out, canceled
+    def __init__(self, res_id, r_type, name, days, arrival, email):
+        self.res_id = res_id
+        self.r_type = r_type  # reservation types: SD, C, I, P
+        self.name = name
+        self.days = days
+        self.arrival = arrival  # datetime.date
+        self.email = email
+        self.total = Decimal("0.00")
+        self.status = "Active"  # Active, CHECKED IN, CHECKED OUT, CANCELED
+        self.room = None
+        self.card_token = None
+        self.paid_date = None
 
-#OOAD System Logic
-
+# -------------------------
+# OOAD System Logic
+# -------------------------
 class OOAD:
-  def __init__(self):
-    self.reservations = {}
-    self.next_id = 1
+    def __init__(self):
+        self.reservations = {}
+        self.next_id = 1
 
-  def date_format(self, s):
-    m, d, y = s.split("/")
-    return date(int(y), int(m), int(d))
+    def date_format(self, s):
+        # expects MM/DD/YYYY or M/D/YYYY
+        try:
+            m, d, y = s.split("/")
+            return date(int(y), int(m), int(d))
+        except Exception:
+            raise ValueError("Arrival must be in MM/DD/YYYY format")
 
-  def stay_valid(self, s):
-    return s.isdigit() and 1 <= int(s) <= 14
+    def stay_valid(self, s):
+        return s.isdigit() and 1 <= int(s) <= 14
 
-  def email_valid(self, s):
-    return "@" in s and "." in s and len(s) <= 40
+    def email_valid(self, s):
+        return "@" in s and "." in s and len(s) <= 40
 
-  def res_type(self, r_type):
-    return {
-      "SD": "60-Day",
-      "C": "Conventional",
-      "I": "Incentive",
-      "P": "Prepaid"
-    }.get(r_type, "Unknown")
+    def res_type(self, r_type):
+        return {
+            "SD": "60-Day",
+            "C": "Conventional",
+            "I": "Incentive",
+            "P": "Prepaid"
+        }.get(r_type, "Unknown")
 
-  def res_price(self, r_type, days):
-    base = Decimal("100")
+    def res_price(self, r_type, days):
+        base = Decimal("100.00")
+        days_dec = Decimal(days)
+        if r_type == "SD":
+            return (base * days_dec).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if r_type == "C":
+            return (base * days_dec * Decimal("1.10")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if r_type == "I":
+            return (base * days_dec * Decimal("0.80")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if r_type == "P":
+            return (base * days_dec * Decimal("0.90")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return (base * days_dec).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    if r_type == "SD":
-      return base * days
-    if r_type == "C":
-      return base * days * Decimal("1.10")
-    if r_type == "I":
-      return base * days * Decimal("0.80")
-    if r_type == "P":
-      return base * days * Decimal("0.90")
+    def list_reservations(self):
+        return list(self.reservations.values())
 
-  def list_reservations(self):
-    return list(self.reservations.values())
+    def add_res(self, r_type, form):
+        name = form["name"].strip()
+        days = form["days"].strip()
+        arrival = form["arrival"].strip()
+        email = form["email"].strip()
 
-  def add_res(self, r_type, form):
-    name = form["name"].strip()
-    days = form["days"]
-    arrival = form["arrival"]
-    email = form["email"]
+        if name == "" or len(name) > 35:
+            raise ValueError("Invalid name")
+        if not self.stay_valid(days):
+            raise ValueError("Days must be 1-14")
+        if not self.email_valid(email):
+            raise ValueError("Invalid email")
 
-    if name == "" or len(name) > 35:
-      raise ValueError("Invalid name")
-    if not self.stay_valid(days):
-      raise ValueError("Days must be 1-14")
-    if not self.email_valid(email):
-      raise ValueError("Invalid email")
+        arrival_date = self.date_format(arrival)
+        days_int = int(days)
 
+        res = Reservation(
+            self.next_id,
+            r_type,
+            name,
+            days_int,
+            arrival_date,
+            email
+        )
 
-    arrival_date = self.date_format(arrival)
-    days_int = int(days)
+        res.total = self.res_price(r_type, days_int)
+        self.reservations[self.next_id] = res
+        self.next_id += 1
+        return res
 
-    res = Reservation(
-      self.next_id,
-      r_type,
-      name,
-      days_int,
-      arrival_date,
-      email
-    )
+    def cancel_reservation(self, res_id):
+        res_id = int(res_id)
+        if res_id not in self.reservations:
+            raise ValueError("Reservation not found")
+        self.reservations[res_id].status = "CANCELED"
+        return self.reservations[res_id]
 
-    res.total = self.res_price(r_type, days_int)
-    self.reservations[self.next_id] = res
-    self.next_id += 1
-    return res
+    def check_in(self, res_id):
+        res_id = int(res_id)
+        if res_id not in self.reservations:
+            raise ValueError("Reservation not found")
+        res = self.reservations[res_id]
+        if res.status == "CANCELED":
+            raise ValueError("Cannot check in a canceled reservation")
+        res.status = "CHECKED IN"
+        return res
 
-  def cancel_reservation(self, res_id):
-    res_id = int(res_id)
-    if res_id not in self.reservations:
-      raise ValueError("Reservation not found")
-    self.reservations[res_id].status = "CANCELED"
-    return self.reservations[res_id]
+    def check_out(self, res_id):
+        res_id = int(res_id)
+        if res_id not in self.reservations:
+            raise ValueError("Reservation not found")
+        res = self.reservations[res_id]
+        if res.status != "CHECKED IN":
+            raise ValueError("Must be CHECKED IN first")
+        res.status = "CHECKED OUT"
+        return res
 
-  def check_in(self, res_id):
-    res_id = int(res_id)
-    if res_id not in self.reservations:
-      raise ValueError("Reservation not found")
-
-    res = self.reservations[res_id]
-    if res.status == "CANCELED":
-      raise ValueError("Cannot check in a canceled reservation")
-
-    res.status = "CHECKED IN"
-    return res
-
-  def check_out(self, res_id):
-    res_id = int(res_id)
-    if res_id not in self.reservations:
-      raise ValueError("Reservation not found")
-
-    res = self.reservations[res_id]
-    if res.status != "CHECKED IN":
-      raise ValueError("Must be check in first")
-
-    res.status = "CHECKED OUT"
-    return res
-#REPORTS - Jose Guzman
+# -------------------------
+# Reports
+# -------------------------
 class Reports:
-    #Inherit Info from OOAD
     def __init__(self, ooad):
         self.ooad = ooad
         self.capacity = 45
 
-    #define expected occupancy report 
-    def expected_occupancy_report(self):
+    def expected_occupancy_report(self, days=30):
         start = date.today()
-        days = 30
-
-        #set format and store percentage
         report_lines = []
-        total_occupancy_percent = 0
+        total_occupancy_percent = 0.0
 
-        #loop for info within timeframe
         for i in range(days):
             current_day = start + timedelta(days=i)
+            prepaid = sixty_day = conventional = incentive = 0
 
-            prepaid = 0
-            sixty_day = 0 
-            conventional = 0
-            incentive = 0
-        
-            #Nested loop for information gathering
             for res in self.ooad.reservations.values():
-                #If room is not booked continue to next day
                 if res.status != "Active":
                     continue
-                
-                #Else gather info
                 stay_start = res.arrival
                 stay_end = res.arrival + timedelta(days=res.days)
-
                 if stay_start <= current_day < stay_end:
-                    #Find Reservation type and add
                     if res.r_type == "P":
                         prepaid += 1
                     elif res.r_type == "SD":
@@ -164,169 +169,119 @@ class Reports:
                     elif res.r_type == "I":
                         incentive += 1
 
-            #Organize info and formula for occupancy percent        
             total = prepaid + sixty_day + conventional + incentive
-            occupancy_rate = (total/self.capacity) * 100
+            occupancy_rate = (total / self.capacity) * 100
             total_occupancy_percent += occupancy_rate
-
-            #Format to report
             report_lines.append(
-                f"{current_day} | P:{prepaid} SD:{sixty_day} C:{conventional} "
-                f"I:{incentive} | Total:{total} | {occupancy_rate:.1f}%"
+                f"{current_day} | P:{prepaid} SD:{sixty_day} C:{conventional} I:{incentive} | Total:{total} | {occupancy_rate:.1f}%"
             )
 
-        #Loop calc rate and join lines
         avg_rate = total_occupancy_percent / days
         report_lines.append(f"\nAverage Expected Occupancy: {avg_rate:.1f}%")
-
         return "\n".join(report_lines)
-    
-    #Define expected income report
-    def expected_income_report(self):
-        start = date.today()
-        days = 30
 
+    def expected_income_report(self, days=30):
+        start = date.today()
         report_lines = []
         total_income = Decimal("0.00")
 
         for i in range(days):
             current_day = start + timedelta(days=i)
             day_income = Decimal("0.00")
-
             for res in self.ooad.reservations.values():
                 if res.status != "Active":
                     continue
-
                 stay_start = res.arrival
                 stay_end = res.arrival + timedelta(days=res.days)
-
-                #Check if reservation is active
                 if stay_start <= current_day < stay_end:
                     nightly = self.ooad.res_price(res.r_type, 1)
                     day_income += nightly
-
             report_lines.append(f"{current_day} | ${day_income:.2f}")
             total_income += day_income
-    
-        avg_income = total_income / days
+
+        avg_income = (total_income / Decimal(days)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         report_lines.append(f"\nTotal Expected Income: ${total_income:.2f}")
         report_lines.append(f"Average Nightly Income: ${avg_income:.2f}")
-
         return "\n".join(report_lines)
 
-    #Define incentive report 
-    def incentive_discount_report(self):
+    def incentive_discount_report(self, days=30):
         start = date.today()
-        days = 30
-
         report_lines = []
         total_discount = Decimal("0.00")
 
         for i in range(days):
             current_day = start + timedelta(days=i)
             nightly_loss = Decimal("0.00")
-
             for res in self.ooad.reservations.values():
                 if res.status != "Active":
                     continue
-
                 stay_start = res.arrival
                 stay_end = res.arrival + timedelta(days=res.days)
-
                 if stay_start <= current_day < stay_end and res.r_type == "I":
                     full_rate = self.ooad.res_price("C", 1)
                     incentive_rate = self.ooad.res_price("I", 1)
                     nightly_loss += (full_rate - incentive_rate)
-
             report_lines.append(f"{current_day} | ${nightly_loss:.2f}")
             total_discount += nightly_loss
 
-        avg_discount = total_discount / days
+        avg_discount = (total_discount / Decimal(days)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         report_lines.append(f"\nTotal Incentive Discount: ${total_discount:.2f}")
         report_lines.append(f"Average Incentive Discount: ${avg_discount:.2f}")
-
         return "\n".join(report_lines)
 
-    #Daily Arrivals Report
     def daily_arrivals_report(self, target_day=None):
         if target_day is None:
             target_day = date.today()
-
         arrivals = []
-
         for res in self.ooad.reservations.values():
             if res.status != "Active":
                 continue
-
             if res.arrival == target_day:
                 departure = res.arrival + timedelta(days=res.days)
                 room_number = 100 + res.res_id
                 arrivals.append((res.name, res.r_type, room_number, departure))
-
-        arrivals.sort(key=lambda x: x[0])  # sort by guest name
-
+        arrivals.sort(key=lambda x: x[0])
         report_lines = [f"Arrivals Report for {target_day}:\n"]
-
         if not arrivals:
             report_lines.append("No expected arrivals today.")
         else:
             for name, rtype, room, dep in arrivals:
-                report_lines.append(
-                    f"{name} | Type:{rtype} | Room {room} | Departs {dep}"
-                )
-
+                report_lines.append(f"{name} | Type:{rtype} | Room {room} | Departs {dep}")
         return "\n".join(report_lines)
 
-    #Daily occupancy report 
     def daily_occupancy_report(self, target_day=None):
         if target_day is None:
             target_day = date.today()
-
         occupants = []
-
         for res in self.ooad.reservations.values():
             if res.status not in ("Active", "CHECKED IN"):
                 continue
-
             stay_start = res.arrival
             stay_end = res.arrival + timedelta(days=res.days)
-
             if stay_start <= target_day < stay_end:
                 room_number = 100 + res.res_id
                 departure = stay_end
                 name = res.name
-
-                # mark departure
-                if target_day == stay_end:
-                    name = "*" + name
-
                 occupants.append((room_number, name, departure))
-
         occupants.sort(key=lambda x: x[0])
-
         report_lines = [f"Occupancy Report for {target_day}:\n"]
-
         if not occupants:
             report_lines.append("No occupied rooms today.")
         else:
             for room, name, dep_date in occupants:
                 report_lines.append(f"Room {room} | {name} | Departs {dep_date}")
-
         return "\n".join(report_lines)
 
-    #Accomodation bill
     def print_bill(self, res_id):
         res = self.ooad.reservations.get(res_id)
         if not res:
             raise ValueError("Reservation not found")
-
         today = date.today()
         arrival = res.arrival
         departure = res.arrival + timedelta(days=res.days)
         nights = res.days
         room = getattr(res, "room", "UNASSIGNED")
         total = res.total
-
         lines = []
         lines.append(f"Accommodation Bill — Printed {today}")
         lines.append("--------------------------------------")
@@ -336,15 +291,14 @@ class Reports:
         lines.append(f"Departure Date: {departure}")
         lines.append(f"Nights: {nights}")
         lines.append(f"Total Charge: ${total:.2f}")
-
-        if res.r_type in ("P", "SD"):
+        if res.r_type in ("P", "SD") and getattr(res, "paid_date", None):
             lines.append(f"\nPaid in Advance: {res.paid_date}")
             lines.append(f"Amount Paid: ${total:.2f}")
-
         return "\n".join(lines)
-    
- #Jaheim Patterson Billing Demo 
-   
+
+# -------------------------
+# Billing CLI helpers
+# -------------------------
 def display_rooms():
     print("\nAvailable Rooms:")
     print("1. Single Room  - $80 per night")
@@ -352,16 +306,12 @@ def display_rooms():
     print("3. Deluxe Room  - $200 per night\n")
 
 def get_room_price(choice: int) -> Decimal:
-    prices = {
-        1: Decimal("80.00"),
-        2: Decimal("120.00"),
-        3: Decimal("200.00")
-    }
+    prices = {1: Decimal("80.00"), 2: Decimal("120.00"), 3: Decimal("200.00")}
     return prices.get(choice, None)
 
 def calculate_bill(room_price: Decimal, nights: int, discount: Decimal = Decimal("0.00")):
     subtotal = (room_price * Decimal(nights)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    tax = (subtotal * Decimal("0.10")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)  # 10% tax
+    tax = (subtotal * Decimal("0.10")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     total = (subtotal + tax - discount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return subtotal, tax, total
 
@@ -369,26 +319,22 @@ def billing_cli():
     print("===================================")
     print("      HOTEL BILLING SYSTEM")
     print("===================================")
-
     name = input("Enter Guest Name: ").strip()
     try:
         nights = int(input("Enter number of nights: ").strip())
     except ValueError:
         print("Invalid number of nights")
         return
-
     display_rooms()
     try:
         room_choice = int(input("Choose a room (1-3): ").strip())
     except ValueError:
         print("Invalid choice")
         return
-
     price = get_room_price(room_choice)
     if price is None:
         print("Invalid room choice!")
         return
-
     discount_option = input("Apply discount? (yes/no): ").lower().strip()
     discount = Decimal("0.00")
     if discount_option == "yes":
@@ -397,9 +343,7 @@ def billing_cli():
         except Exception:
             print("Invalid discount amount; using 0.00")
             discount = Decimal("0.00")
-
     subtotal, tax, total = calculate_bill(price, nights, discount)
-
     print("\n===================================")
     print("              BILL")
     print("===================================")
@@ -414,26 +358,107 @@ def billing_cli():
     print("===================================")
 
 # -------------------------
-# Example usage / small demo
+# Credit-card helpers (single source, fixed indentation)
 # -------------------------
-def demo_ooad_and_reports():
-    o = OOAD()
-    # add some sample reservations
+def luhn_check(card_number: str) -> bool:
+    digits = [int(ch) for ch in re.sub(r'\D', '', card_number)]
+    if not digits:
+        return False
+    checksum = 0
+    parity = len(digits) % 2
+    for i, d in enumerate(digits):
+        if i % 2 == parity:
+            d *= 2
+            if d > 9:
+                d -= 9
+        checksum += d
+    return (checksum % 10) == 0
+
+def detect_card_type(card_number: str) -> str:
+    s = re.sub(r'\D', '', card_number)
+    if re.match(r'^4\d{12}(\d{3})?$', s):
+        return "Visa"
+    if re.match(r'^(5[1-5]\d{14}|2(2[2-9]\d{12}|[3-6]\d{13}|7[01]\d{12}|720\d{12}))$', s):
+        return "MasterCard"
+    if re.match(r'^(3[47]\d{13})$', s):
+        return "American Express"
+    if re.match(r'^(6(?:011|5\d{2})\d{12})$', s):
+        return "Discover"
+    return "Unknown"
+
+def validate_expiry(month: int, year: int) -> bool:
+    if year < 100:
+        year += 2000
     try:
-        o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
-        o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
-        o.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com"})
-    except ValueError as e:
-        print("Demo add_res error:", e)
+        expiry = dt.datetime(year, month, 1)
+    except ValueError:
+        return False
+    last_day = (expiry.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
+    return last_day.date() >= date.today()
 
-    print("\nAll reservations:")
-    for r in o.list_reservations():
-        print(r)
+def mask_pan(card_number: str) -> str:
+    digits = re.sub(r'\D', '', card_number)
+    if len(digits) <= 4:
+        return digits
+    masked = '*' * (len(digits) - 4) + digits[-4:]
+    return " ".join([masked[i:i+4] for i in range(0, len(masked), 4)])
 
-    report = Reports(o)
-    print("\nExpected occupancy (next 7 days):")
-    print(report.expected_occupancy_report()[:7])
+# Encryption/tokenization (demo only)
+def generate_master_key() -> bytes:
+    return Fernet.generate_key()
 
+MASTER_KEY = generate_master_key()
+fernet = Fernet(MASTER_KEY)
+CARD_STORE = {}
+
+def encrypt_pan(plain_pan: str) -> bytes:
+    return fernet.encrypt(plain_pan.encode('utf-8'))
+
+def decrypt_pan(token: bytes) -> str:
+    return fernet.decrypt(token).decode('utf-8')
+
+def generate_card_token() -> str:
+    return 'card_' + uuid.uuid4().hex
+
+def store_card_info(card_number: str, exp_month: int, exp_year: int, cardholder_name: str, cvv: str = None) -> dict:
+    clean_pan = re.sub(r'\D', '', card_number)
+    if not luhn_check(clean_pan):
+        raise ValueError("Card number failed Luhn check.")
+    if not validate_expiry(exp_month, exp_year):
+        raise ValueError("Card is expired or invalid expiry date.")
+    token = generate_card_token()
+    encrypted_pan = encrypt_pan(clean_pan)
+    record = {
+        "token": token,
+        "cardholder_name": cardholder_name,
+        "last4": clean_pan[-4:],
+        "card_type": detect_card_type(clean_pan),
+        "exp_month": exp_month,
+        "exp_year": exp_year if exp_year >= 100 else (2000 + exp_year),
+        "encrypted_pan": encrypted_pan,
+        "created_at": dt.datetime.utcnow().isoformat() + "Z",
+    }
+    CARD_STORE[token] = record
+    return record
+
+def get_card_display(token: str) -> dict:
+    rec = CARD_STORE.get(token)
+    if not rec:
+        raise KeyError("Card not found.")
+    masked = '**** **** **** ' + rec['last4']
+    return {
+        "token": rec['token'],
+        "cardholder_name": rec['cardholder_name'],
+        "masked_pan": masked,
+        "last4": rec['last4'],
+        "card_type": rec['card_type'],
+        "exp_month": rec['exp_month'],
+        "exp_year": rec['exp_year'],
+    }
+
+# -------------------------
+# GUI (Tkinter)
+# -------------------------
 def run_gui():
     ooad = OOAD()
 
@@ -489,15 +514,22 @@ def run_gui():
 
     tk.Label(list_frame, text="Reservations:").grid(row=0, column=0, sticky="w")
 
-    res_listbox = tk.Listbox(list_frame, width=70, height=12)
+    res_listbox = tk.Listbox(list_frame, width=80, height=15)
     res_listbox.grid(row=1, column=0, columnspan=3)
 
     def refresh_listbox():
         res_listbox.delete(0, tk.END)
         for res in ooad.list_reservations():
+            card_info = ""
+            if res.card_token:
+                try:
+                    cd = get_card_display(res.card_token)
+                    card_info = f" | Card:{cd['masked_pan']}"
+                except Exception:
+                    card_info = ""
             line = (
                 f"ID {res.res_id} | {res.name} | {res.r_type} | "
-                f"{res.arrival} | {res.days} nights | {res.status}"
+                f"{res.arrival} | {res.days} nights | {res.status}{card_info}"
             )
             res_listbox.insert(tk.END, line)
 
@@ -507,7 +539,6 @@ def run_gui():
             messagebox.showwarning("Select", "Please select a reservation first.")
             return None
         line = res_listbox.get(sel[0])
-        # line starts with "ID X | ..."
         try:
             parts = line.split()
             return int(parts[1])
@@ -548,6 +579,62 @@ def run_gui():
         except ValueError as e:
             messagebox.showerror("Error", str(e))
 
+    def add_payment_to_reservation():
+        res_id = get_selected_res_id()
+        if res_id is None:
+            return
+        res = ooad.reservations.get(res_id)
+        if not res:
+            messagebox.showerror("Error", "Reservation not found.")
+            return
+
+        # simple dialog for card info (demo only; DO NOT store CVV in production)
+        dlg = tk.Toplevel(root)
+        dlg.title(f"Add Payment for Reservation #{res_id}")
+        tk.Label(dlg, text="Cardholder Name:").grid(row=0, column=0, sticky="w")
+        name_ent = tk.Entry(dlg, width=30)
+        name_ent.grid(row=0, column=1)
+        name_ent.insert(0, res.name)
+
+        tk.Label(dlg, text="Card Number:").grid(row=1, column=0, sticky="w")
+        pan_ent = tk.Entry(dlg, width=30)
+        pan_ent.grid(row=1, column=1)
+
+        tk.Label(dlg, text="Expiry Month (MM):").grid(row=2, column=0, sticky="w")
+        expm_ent = tk.Entry(dlg, width=6)
+        expm_ent.grid(row=2, column=1, sticky="w")
+
+        tk.Label(dlg, text="Expiry Year (YYYY):").grid(row=3, column=0, sticky="w")
+        expy_ent = tk.Entry(dlg, width=8)
+        expy_ent.grid(row=3, column=1, sticky="w")
+
+        tk.Label(dlg, text="CVV (will not be stored):").grid(row=4, column=0, sticky="w")
+        cvv_ent = tk.Entry(dlg, width=10, show="*")
+        cvv_ent.grid(row=4, column=1, sticky="w")
+
+        def do_save_card():
+            cardholder = name_ent.get().strip()
+            pan = pan_ent.get().strip()
+            try:
+                expm = int(expm_ent.get().strip())
+                expy = int(expy_ent.get().strip())
+            except Exception:
+                messagebox.showerror("Error", "Expiry month/year must be numeric.")
+                return
+            cvv = cvv_ent.get().strip()
+            try:
+                rec = store_card_info(pan, expm, expy, cardholder, cvv if cvv else None)
+                res.card_token = rec["token"]
+                res.paid_date = date.today()
+                messagebox.showinfo("Saved", f"Card token saved: {rec['token']}\nMasked: **** **** **** {rec['last4']}")
+                dlg.destroy()
+                refresh_listbox()
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+        save_btn = tk.Button(dlg, text="Save Card", command=do_save_card)
+        save_btn.grid(row=5, column=0, columnspan=2, pady=8)
+
     checkin_button = tk.Button(list_frame, text="Check In", command=do_check_in)
     checkin_button.grid(row=2, column=0, pady=5, sticky="w")
 
@@ -557,27 +644,46 @@ def run_gui():
     cancel_button = tk.Button(list_frame, text="Cancel", command=do_cancel)
     cancel_button.grid(row=2, column=2, pady=5, sticky="w")
 
+    payment_button = tk.Button(list_frame, text="Add Payment", command=add_payment_to_reservation)
+    payment_button.grid(row=3, column=0, columnspan=3, pady=5)
+
     # ---------- Report button ----------
-    def show_report():
+    def show_occupancy_report():
         report = Reports(ooad)
         text = report.expected_occupancy_report()
         win = tk.Toplevel(root)
         win.title("Expected Occupancy (30 days)")
-        txt = tk.Text(win, width=80, height=25)
+        txt = tk.Text(win, width=100, height=30)
         txt.pack(padx=10, pady=10)
         txt.insert("1.0", text)
         txt.config(state="disabled")
 
-    report_button = tk.Button(list_frame, text="Show Occupancy Report", command=show_report)
-    report_button.grid(row=3, column=0, columnspan=3, pady=10)
+    report_button = tk.Button(list_frame, text="Show Occupancy Report", command=show_occupancy_report)
+    report_button.grid(row=4, column=0, columnspan=3, pady=10)
 
     # load initial state
     refresh_listbox()
-
     root.mainloop()
-    
+
+# -------------------------
+# Demo / entrypoint
+# -------------------------
+def demo_ooad_and_reports():
+    o = OOAD()
+    try:
+        o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
+        o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
+        o.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com"})
+    except ValueError as e:
+        print("Demo add_res error:", e)
+    print("\nAll reservations:")
+    for r in o.list_reservations():
+        print(f"ID {r.res_id} | {r.name} | {r.r_type} | {r.arrival} | {r.days} nights | {r.status}")
+    report = Reports(o)
+    print("\nExpected occupancy (30 days):")
+    print(report.expected_occupancy_report())
+
 if __name__ == "__main__":
-    # If run with argument "demo", run demo; with "bill", run billing CLI; otherwise run GUI
     if len(sys.argv) > 1:
         if sys.argv[1] == "demo":
             demo_ooad_and_reports()
@@ -588,5 +694,6 @@ if __name__ == "__main__":
         else:
             print("Unknown option. Use one of: gui, demo, bill")
     else:
+        run_gui()
         # Default: open GUI
         run_gui()
