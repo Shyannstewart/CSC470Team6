@@ -1,32 +1,157 @@
+# hotel_management_full_crypto.py
+# -*- coding: utf-8 -*-
+"""
+Important:
+- Install cryptography for Python 3.10 before running:
+    py -3.10 -m pip install cryptography
+"""
+
 import sys
+import os
 import re
 import uuid
 import datetime as dt
-import tkinter as tk
-from tkinter import simpledialog, messagebox
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+import tkinter as tk
+from tkinter import messagebox
 from cryptography.fernet import Fernet
 
-#defining reservations - Juelz Moore
+# -------------------------
+# Encryption / Card Vault
+# -------------------------
+KEY_FILE = "card_master.key"
 
-# -*- coding: utf-8 -*-
-"""
-Fixed and cleaned hotel management + credit-card demo GUI.
 
-Created/Updated: 2025-12-01
-"""
+def load_or_create_master_key(path=KEY_FILE) -> bytes:
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    key = Fernet.generate_key()
+    with open(path, "wb") as f:
+        f.write(key)
+    return key
+
+
+MASTER_KEY = load_or_create_master_key()
+fernet = Fernet(MASTER_KEY)
+
+# In-memory card vault (token -> record). PANs are stored encrypted.
+CARD_STORE = {}  # token -> {token, encrypted_pan, last4, card_type, exp_month, exp_year, holder, created_at}
+
+
+def generate_card_token() -> str:
+    return "card_" + uuid.uuid4().hex
+
+
+def encrypt_pan(pan: str) -> bytes:
+    return fernet.encrypt(str(pan).encode("utf-8"))
+
+
+def decrypt_pan(token_bytes: bytes) -> str:
+    return fernet.decrypt(token_bytes).decode("utf-8")
+
+
+def detect_card_type(pan: str) -> str:
+    s = re.sub(r"\D", "", str(pan))
+    if s.startswith("4"):
+        return "Visa"
+    if re.match(r"^5[1-5]", s):
+        return "MasterCard"
+    if re.match(r"^3[47]", s):
+        return "American Express"
+    if s.startswith("6"):
+        return "Discover"
+    return "Unknown"
+
+
+def luhn_check(card_number: str) -> bool:
+    s = re.sub(r"\D", "", str(card_number or ""))
+    if len(s) < 12:
+        return False
+    total = 0
+    rev = s[::-1]
+    for i, ch in enumerate(rev):
+        d = ord(ch) - 48
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
+def validate_expiry(month: int, year: int) -> bool:
+    try:
+        mm = int(month)
+        yy = int(year)
+    except Exception:
+        return False
+    if not (1 <= mm <= 12):
+        return False
+    if yy < 100:
+        yy += 2000
+    try:
+        first = dt.date(yy, mm, 1)
+    except Exception:
+        return False
+    next_month = first.replace(day=28) + dt.timedelta(days=4)
+    last_day = next_month.replace(day=1) - dt.timedelta(days=1)
+    return last_day >= date.today()
+
+
+def store_card_info(card_number: str, exp_month: int, exp_year: int, cardholder_name: str, cvv: str = None) -> dict:
+    if not card_number:
+        raise ValueError("No card number provided.")
+    clean_pan = re.sub(r"\D", "", str(card_number))
+    if not (12 <= len(clean_pan) <= 19):
+        raise ValueError(f"Card number length invalid ({len(clean_pan)} digits).")
+    if not luhn_check(clean_pan):
+        raise ValueError("Card number failed Luhn check.")
+    if not validate_expiry(exp_month, exp_year):
+        raise ValueError("Expiry date invalid or card expired.")
+    if exp_year < 100:
+        exp_year += 2000
+    token = generate_card_token()
+    encrypted = encrypt_pan(clean_pan)
+    rec = {
+        "token": token,
+        "encrypted_pan": encrypted,
+        "last4": clean_pan[-4:],
+        "card_type": detect_card_type(clean_pan),
+        "exp_month": exp_month,
+        "exp_year": exp_year,
+        "holder": cardholder_name,
+        "created_at": dt.datetime.utcnow().isoformat() + "Z",
+    }
+    CARD_STORE[token] = rec
+    return rec
+
+
+def get_card_display(token: str) -> dict:
+    rec = CARD_STORE.get(token)
+    if not rec:
+        return None
+    return {
+        "masked_pan": f"**** **** **** {rec['last4']}",
+        "last4": rec["last4"],
+        "card_type": rec["card_type"],
+        "exp_month": rec["exp_month"],
+        "exp_year": rec["exp_year"],
+        "holder": rec["holder"],
+    }
+
 
 # -------------------------
 # Data model
 # -------------------------
 class Reservation:
-    def __init__(self, res_id, r_type, name, days, arrival, email):
+    def __init__(self, res_id: int, r_type: str, name: str, days: int, arrival: date, email: str):
         self.res_id = res_id
-        self.r_type = r_type  # reservation types: SD, C, I, P
+        self.r_type = r_type  # SD, C, I, P
         self.name = name
         self.days = days
-        self.arrival = arrival  # datetime.date
+        self.arrival = arrival
         self.email = email
         self.total = Decimal("0.00")
         self.status = "Active"  # Active, CHECKED IN, CHECKED OUT, CANCELED
@@ -34,37 +159,29 @@ class Reservation:
         self.card_token = None
         self.paid_date = None
 
+
 # -------------------------
 # OOAD System Logic
 # -------------------------
 class OOAD:
     def __init__(self):
-        self.reservations = {}
+        self.reservations: dict[int, Reservation] = {}
         self.next_id = 1
 
-    def date_format(self, s):
-        # expects MM/DD/YYYY or M/D/YYYY
+    def date_format(self, s: str) -> date:
         try:
             m, d, y = s.split("/")
             return date(int(y), int(m), int(d))
         except Exception:
             raise ValueError("Arrival must be in MM/DD/YYYY format")
 
-    def stay_valid(self, s):
+    def stay_valid(self, s: str) -> bool:
         return s.isdigit() and 1 <= int(s) <= 14
 
-    def email_valid(self, s):
+    def email_valid(self, s: str) -> bool:
         return "@" in s and "." in s and len(s) <= 40
 
-    def res_type(self, r_type):
-        return {
-            "SD": "60-Day",
-            "C": "Conventional",
-            "I": "Incentive",
-            "P": "Prepaid"
-        }.get(r_type, "Unknown")
-
-    def res_price(self, r_type, days):
+    def res_price(self, r_type: str, days: int) -> Decimal:
         base = Decimal("100.00")
         days_dec = Decimal(days)
         if r_type == "SD":
@@ -80,7 +197,7 @@ class OOAD:
     def list_reservations(self):
         return list(self.reservations.values())
 
-    def add_res(self, r_type, form):
+    def add_res(self, r_type: str, form: dict) -> Reservation:
         name = form["name"].strip()
         days = form["days"].strip()
         arrival = form["arrival"].strip()
@@ -96,28 +213,20 @@ class OOAD:
         arrival_date = self.date_format(arrival)
         days_int = int(days)
 
-        res = Reservation(
-            self.next_id,
-            r_type,
-            name,
-            days_int,
-            arrival_date,
-            email
-        )
-
+        res = Reservation(self.next_id, r_type, name, days_int, arrival_date, email)
         res.total = self.res_price(r_type, days_int)
         self.reservations[self.next_id] = res
         self.next_id += 1
         return res
 
-    def cancel_reservation(self, res_id):
+    def cancel_reservation(self, res_id: int) -> Reservation:
         res_id = int(res_id)
         if res_id not in self.reservations:
             raise ValueError("Reservation not found")
         self.reservations[res_id].status = "CANCELED"
         return self.reservations[res_id]
 
-    def check_in(self, res_id):
+    def check_in(self, res_id: int) -> Reservation:
         res_id = int(res_id)
         if res_id not in self.reservations:
             raise ValueError("Reservation not found")
@@ -127,7 +236,7 @@ class OOAD:
         res.status = "CHECKED IN"
         return res
 
-    def check_out(self, res_id):
+    def check_out(self, res_id: int) -> Reservation:
         res_id = int(res_id)
         if res_id not in self.reservations:
             raise ValueError("Reservation not found")
@@ -137,15 +246,16 @@ class OOAD:
         res.status = "CHECKED OUT"
         return res
 
+
 # -------------------------
 # Reports
 # -------------------------
 class Reports:
-    def __init__(self, ooad):
+    def __init__(self, ooad: OOAD):
         self.ooad = ooad
         self.capacity = 45
 
-    def expected_occupancy_report(self, days=30):
+    def expected_occupancy_report(self, days: int = 30) -> str:
         start = date.today()
         report_lines = []
         total_occupancy_percent = 0.0
@@ -172,6 +282,7 @@ class Reports:
             total = prepaid + sixty_day + conventional + incentive
             occupancy_rate = (total / self.capacity) * 100
             total_occupancy_percent += occupancy_rate
+
             report_lines.append(
                 f"{current_day} | P:{prepaid} SD:{sixty_day} C:{conventional} I:{incentive} | Total:{total} | {occupancy_rate:.1f}%"
             )
@@ -180,7 +291,7 @@ class Reports:
         report_lines.append(f"\nAverage Expected Occupancy: {avg_rate:.1f}%")
         return "\n".join(report_lines)
 
-    def expected_income_report(self, days=30):
+    def expected_income_report(self, days: int = 30) -> str:
         start = date.today()
         report_lines = []
         total_income = Decimal("0.00")
@@ -188,6 +299,7 @@ class Reports:
         for i in range(days):
             current_day = start + timedelta(days=i)
             day_income = Decimal("0.00")
+
             for res in self.ooad.reservations.values():
                 if res.status != "Active":
                     continue
@@ -196,6 +308,7 @@ class Reports:
                 if stay_start <= current_day < stay_end:
                     nightly = self.ooad.res_price(res.r_type, 1)
                     day_income += nightly
+
             report_lines.append(f"{current_day} | ${day_income:.2f}")
             total_income += day_income
 
@@ -204,7 +317,7 @@ class Reports:
         report_lines.append(f"Average Nightly Income: ${avg_income:.2f}")
         return "\n".join(report_lines)
 
-    def incentive_discount_report(self, days=30):
+    def incentive_discount_report(self, days: int = 30) -> str:
         start = date.today()
         report_lines = []
         total_discount = Decimal("0.00")
@@ -212,15 +325,18 @@ class Reports:
         for i in range(days):
             current_day = start + timedelta(days=i)
             nightly_loss = Decimal("0.00")
+
             for res in self.ooad.reservations.values():
                 if res.status != "Active":
                     continue
                 stay_start = res.arrival
                 stay_end = res.arrival + timedelta(days=res.days)
+
                 if stay_start <= current_day < stay_end and res.r_type == "I":
                     full_rate = self.ooad.res_price("C", 1)
                     incentive_rate = self.ooad.res_price("I", 1)
                     nightly_loss += (full_rate - incentive_rate)
+
             report_lines.append(f"{current_day} | ${nightly_loss:.2f}")
             total_discount += nightly_loss
 
@@ -229,91 +345,28 @@ class Reports:
         report_lines.append(f"Average Incentive Discount: ${avg_discount:.2f}")
         return "\n".join(report_lines)
 
-    def daily_arrivals_report(self, target_day=None):
-        if target_day is None:
-            target_day = date.today()
-        arrivals = []
-        for res in self.ooad.reservations.values():
-            if res.status != "Active":
-                continue
-            if res.arrival == target_day:
-                departure = res.arrival + timedelta(days=res.days)
-                room_number = 100 + res.res_id
-                arrivals.append((res.name, res.r_type, room_number, departure))
-        arrivals.sort(key=lambda x: x[0])
-        report_lines = [f"Arrivals Report for {target_day}:\n"]
-        if not arrivals:
-            report_lines.append("No expected arrivals today.")
-        else:
-            for name, rtype, room, dep in arrivals:
-                report_lines.append(f"{name} | Type:{rtype} | Room {room} | Departs {dep}")
-        return "\n".join(report_lines)
-
-    def daily_occupancy_report(self, target_day=None):
-        if target_day is None:
-            target_day = date.today()
-        occupants = []
-        for res in self.ooad.reservations.values():
-            if res.status not in ("Active", "CHECKED IN"):
-                continue
-            stay_start = res.arrival
-            stay_end = res.arrival + timedelta(days=res.days)
-            if stay_start <= target_day < stay_end:
-                room_number = 100 + res.res_id
-                departure = stay_end
-                name = res.name
-                occupants.append((room_number, name, departure))
-        occupants.sort(key=lambda x: x[0])
-        report_lines = [f"Occupancy Report for {target_day}:\n"]
-        if not occupants:
-            report_lines.append("No occupied rooms today.")
-        else:
-            for room, name, dep_date in occupants:
-                report_lines.append(f"Room {room} | {name} | Departs {dep_date}")
-        return "\n".join(report_lines)
-
-    def print_bill(self, res_id):
-        res = self.ooad.reservations.get(res_id)
-        if not res:
-            raise ValueError("Reservation not found")
-        today = date.today()
-        arrival = res.arrival
-        departure = res.arrival + timedelta(days=res.days)
-        nights = res.days
-        room = getattr(res, "room", "UNASSIGNED")
-        total = res.total
-        lines = []
-        lines.append(f"Accommodation Bill — Printed {today}")
-        lines.append("--------------------------------------")
-        lines.append(f"Guest Name: {res.name}")
-        lines.append(f"Room Number: {room}")
-        lines.append(f"Arrival Date: {arrival}")
-        lines.append(f"Departure Date: {departure}")
-        lines.append(f"Nights: {nights}")
-        lines.append(f"Total Charge: ${total:.2f}")
-        if res.r_type in ("P", "SD") and getattr(res, "paid_date", None):
-            lines.append(f"\nPaid in Advance: {res.paid_date}")
-            lines.append(f"Amount Paid: ${total:.2f}")
-        return "\n".join(lines)
 
 # -------------------------
 # Billing CLI helpers
 # -------------------------
-def display_rooms():
+def display_rooms() -> None:
     print("\nAvailable Rooms:")
     print("1. Single Room  - $80 per night")
     print("2. Double Room  - $120 per night")
     print("3. Deluxe Room  - $200 per night\n")
 
+
 def get_room_price(choice: int) -> Decimal:
     prices = {1: Decimal("80.00"), 2: Decimal("120.00"), 3: Decimal("200.00")}
     return prices.get(choice, None)
+
 
 def calculate_bill(room_price: Decimal, nights: int, discount: Decimal = Decimal("0.00")):
     subtotal = (room_price * Decimal(nights)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     tax = (subtotal * Decimal("0.10")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     total = (subtotal + tax - discount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return subtotal, tax, total
+
 
 def billing_cli():
     print("===================================")
@@ -325,16 +378,19 @@ def billing_cli():
     except ValueError:
         print("Invalid number of nights")
         return
+
     display_rooms()
     try:
         room_choice = int(input("Choose a room (1-3): ").strip())
     except ValueError:
         print("Invalid choice")
         return
+
     price = get_room_price(room_choice)
     if price is None:
         print("Invalid room choice!")
         return
+
     discount_option = input("Apply discount? (yes/no): ").lower().strip()
     discount = Decimal("0.00")
     if discount_option == "yes":
@@ -343,6 +399,7 @@ def billing_cli():
         except Exception:
             print("Invalid discount amount; using 0.00")
             discount = Decimal("0.00")
+
     subtotal, tax, total = calculate_bill(price, nights, discount)
     print("\n===================================")
     print("              BILL")
@@ -357,120 +414,23 @@ def billing_cli():
     print(f"Total Amount    : ${total:.2f}")
     print("===================================")
 
-# -------------------------
-# Credit-card helpers (single source, fixed indentation)
-# -------------------------
-def luhn_check(card_number: str) -> bool:
-    digits = [int(ch) for ch in re.sub(r'\D', '', card_number)]
-    if not digits:
-        return False
-    checksum = 0
-    parity = len(digits) % 2
-    for i, d in enumerate(digits):
-        if i % 2 == parity:
-            d *= 2
-            if d > 9:
-                d -= 9
-        checksum += d
-    return (checksum % 10) == 0
-
-def detect_card_type(card_number: str) -> str:
-    s = re.sub(r'\D', '', card_number)
-    if re.match(r'^4\d{12}(\d{3})?$', s):
-        return "Visa"
-    if re.match(r'^(5[1-5]\d{14}|2(2[2-9]\d{12}|[3-6]\d{13}|7[01]\d{12}|720\d{12}))$', s):
-        return "MasterCard"
-    if re.match(r'^(3[47]\d{13})$', s):
-        return "American Express"
-    if re.match(r'^(6(?:011|5\d{2})\d{12})$', s):
-        return "Discover"
-    return "Unknown"
-
-def validate_expiry(month: int, year: int) -> bool:
-    if year < 100:
-        year += 2000
-    try:
-        expiry = dt.datetime(year, month, 1)
-    except ValueError:
-        return False
-    last_day = (expiry.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
-    return last_day.date() >= date.today()
-
-def mask_pan(card_number: str) -> str:
-    digits = re.sub(r'\D', '', card_number)
-    if len(digits) <= 4:
-        return digits
-    masked = '*' * (len(digits) - 4) + digits[-4:]
-    return " ".join([masked[i:i+4] for i in range(0, len(masked), 4)])
-
-# Encryption/tokenization (demo only)
-def generate_master_key() -> bytes:
-    return Fernet.generate_key()
-
-MASTER_KEY = generate_master_key()
-fernet = Fernet(MASTER_KEY)
-CARD_STORE = {}
-
-def encrypt_pan(plain_pan: str) -> bytes:
-    return fernet.encrypt(plain_pan.encode('utf-8'))
-
-def decrypt_pan(token: bytes) -> str:
-    return fernet.decrypt(token).decode('utf-8')
-
-def generate_card_token() -> str:
-    return 'card_' + uuid.uuid4().hex
-
-def store_card_info(card_number: str, exp_month: int, exp_year: int, cardholder_name: str, cvv: str = None) -> dict:
-    clean_pan = re.sub(r'\D', '', card_number)
-    if not luhn_check(clean_pan):
-        raise ValueError("Card number failed Luhn check.")
-    if not validate_expiry(exp_month, exp_year):
-        raise ValueError("Card is expired or invalid expiry date.")
-    token = generate_card_token()
-    encrypted_pan = encrypt_pan(clean_pan)
-    record = {
-        "token": token,
-        "cardholder_name": cardholder_name,
-        "last4": clean_pan[-4:],
-        "card_type": detect_card_type(clean_pan),
-        "exp_month": exp_month,
-        "exp_year": exp_year if exp_year >= 100 else (2000 + exp_year),
-        "encrypted_pan": encrypted_pan,
-        "created_at": dt.datetime.utcnow().isoformat() + "Z",
-    }
-    CARD_STORE[token] = record
-    return record
-
-def get_card_display(token: str) -> dict:
-    rec = CARD_STORE.get(token)
-    if not rec:
-        raise KeyError("Card not found.")
-    masked = '**** **** **** ' + rec['last4']
-    return {
-        "token": rec['token'],
-        "cardholder_name": rec['cardholder_name'],
-        "masked_pan": masked,
-        "last4": rec['last4'],
-        "card_type": rec['card_type'],
-        "exp_month": rec['exp_month'],
-        "exp_year": rec['exp_year'],
-    }
 
 # -------------------------
-# GUI (Tkinter)
+# Tkinter GUI
 # -------------------------
 def run_gui():
     ooad = OOAD()
 
     root = tk.Tk()
     root.title("Ophelia's Oasis HRS")
+    root.geometry("1000x600")
 
-    # ---------- Left side: Reservation form ----------
+    # Left: form
     form_frame = tk.Frame(root, padx=10, pady=10)
-    form_frame.grid(row=0, column=0, sticky="n")
+    form_frame.grid(row=0, column=0, sticky="nw")
 
     tk.Label(form_frame, text="Name:").grid(row=0, column=0, sticky="w")
-    name_entry = tk.Entry(form_frame, width=25)
+    name_entry = tk.Entry(form_frame, width=30)
     name_entry.grid(row=0, column=1)
 
     tk.Label(form_frame, text="Days (1–14):").grid(row=1, column=0, sticky="w")
@@ -482,13 +442,27 @@ def run_gui():
     arrival_entry.grid(row=2, column=1, sticky="w")
 
     tk.Label(form_frame, text="Email:").grid(row=3, column=0, sticky="w")
-    email_entry = tk.Entry(form_frame, width=25)
+    email_entry = tk.Entry(form_frame, width=30)
     email_entry.grid(row=3, column=1)
 
     tk.Label(form_frame, text="Type:").grid(row=4, column=0, sticky="w")
     type_var = tk.StringVar(value="C")
     type_menu = tk.OptionMenu(form_frame, type_var, "SD", "C", "I", "P")
     type_menu.grid(row=4, column=1, sticky="w")
+
+    def refresh_listbox():
+        res_listbox.delete(0, tk.END)
+        for res in ooad.list_reservations():
+            card_info = ""
+            if res.card_token:
+                cd = get_card_display(res.card_token)
+                if cd:
+                    card_info = f" | Card: {cd['masked_pan']}"
+            line = (
+                f"ID {res.res_id} | {res.name} | {res.r_type} | "
+                f"{res.arrival} | {res.days} nights | {res.status}{card_info}"
+            )
+            res_listbox.insert(tk.END, line)
 
     def add_reservation():
         form = {
@@ -508,30 +482,14 @@ def run_gui():
     add_button = tk.Button(form_frame, text="Add Reservation", command=add_reservation)
     add_button.grid(row=5, column=0, columnspan=2, pady=8)
 
-    # ---------- Right side: Reservation list + actions ----------
+    # Right: list + actions
     list_frame = tk.Frame(root, padx=10, pady=10)
-    list_frame.grid(row=0, column=1, sticky="n")
+    list_frame.grid(row=0, column=1, sticky="nw")
 
     tk.Label(list_frame, text="Reservations:").grid(row=0, column=0, sticky="w")
 
-    res_listbox = tk.Listbox(list_frame, width=80, height=15)
-    res_listbox.grid(row=1, column=0, columnspan=3)
-
-    def refresh_listbox():
-        res_listbox.delete(0, tk.END)
-        for res in ooad.list_reservations():
-            card_info = ""
-            if res.card_token:
-                try:
-                    cd = get_card_display(res.card_token)
-                    card_info = f" | Card:{cd['masked_pan']}"
-                except Exception:
-                    card_info = ""
-            line = (
-                f"ID {res.res_id} | {res.name} | {res.r_type} | "
-                f"{res.arrival} | {res.days} nights | {res.status}{card_info}"
-            )
-            res_listbox.insert(tk.END, line)
+    res_listbox = tk.Listbox(list_frame, width=90, height=20)
+    res_listbox.grid(row=1, column=0, columnspan=4, padx=5, pady=5)
 
     def get_selected_res_id():
         sel = res_listbox.curselection()
@@ -588,9 +546,9 @@ def run_gui():
             messagebox.showerror("Error", "Reservation not found.")
             return
 
-        # simple dialog for card info (demo only; DO NOT store CVV in production)
         dlg = tk.Toplevel(root)
         dlg.title(f"Add Payment for Reservation #{res_id}")
+
         tk.Label(dlg, text="Cardholder Name:").grid(row=0, column=0, sticky="w")
         name_ent = tk.Entry(dlg, width=30)
         name_ent.grid(row=0, column=1)
@@ -604,7 +562,7 @@ def run_gui():
         expm_ent = tk.Entry(dlg, width=6)
         expm_ent.grid(row=2, column=1, sticky="w")
 
-        tk.Label(dlg, text="Expiry Year (YYYY):").grid(row=3, column=0, sticky="w")
+        tk.Label(dlg, text="Expiry Year (YYYY or YY):").grid(row=3, column=0, sticky="w")
         expy_ent = tk.Entry(dlg, width=8)
         expy_ent.grid(row=3, column=1, sticky="w")
 
@@ -645,55 +603,54 @@ def run_gui():
     cancel_button.grid(row=2, column=2, pady=5, sticky="w")
 
     payment_button = tk.Button(list_frame, text="Add Payment", command=add_payment_to_reservation)
-    payment_button.grid(row=3, column=0, columnspan=3, pady=5)
+    payment_button.grid(row=2, column=3, pady=5, sticky="w")
 
-    # ---------- Report button ----------
+    # Reports button
     def show_occupancy_report():
         report = Reports(ooad)
         text = report.expected_occupancy_report()
         win = tk.Toplevel(root)
         win.title("Expected Occupancy (30 days)")
-        txt = tk.Text(win, width=100, height=30)
+        txt = tk.Text(win, width=120, height=30)
         txt.pack(padx=10, pady=10)
         txt.insert("1.0", text)
         txt.config(state="disabled")
 
     report_button = tk.Button(list_frame, text="Show Occupancy Report", command=show_occupancy_report)
-    report_button.grid(row=4, column=0, columnspan=3, pady=10)
+    report_button.grid(row=3, column=0, columnspan=4, pady=10)
 
-    # load initial state
+    # initialize with a few demo reservations (optional)
+    try:
+        ooad.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
+        ooad.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
+        ooad.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com"})
+    except Exception:
+        pass
+
     refresh_listbox()
     root.mainloop()
 
-# -------------------------
-# Demo / entrypoint
-# -------------------------
-def demo_ooad_and_reports():
-    o = OOAD()
-    try:
-        o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
-        o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
-        o.add_res("SD", {"name": "Charlie", "days": "5", "arrival": "12/01/2025", "email": "charlie@example.com"})
-    except ValueError as e:
-        print("Demo add_res error:", e)
-    print("\nAll reservations:")
-    for r in o.list_reservations():
-        print(f"ID {r.res_id} | {r.name} | {r.r_type} | {r.arrival} | {r.days} nights | {r.status}")
-    report = Reports(o)
-    print("\nExpected occupancy (30 days):")
-    print(report.expected_occupancy_report())
 
+# -------------------------
+# Entry point
+# -------------------------
 if __name__ == "__main__":
+    # support CLI options like 'demo' or 'bill' if desired
     if len(sys.argv) > 1:
         if sys.argv[1] == "demo":
-            demo_ooad_and_reports()
+            # simple demo prints
+            o = OOAD()
+            try:
+                o.add_res("P", {"name": "Alice", "days": "3", "arrival": "11/28/2025", "email": "alice@example.com"})
+                o.add_res("C", {"name": "Bob", "days": "2", "arrival": "11/27/2025", "email": "bob@example.com"})
+            except Exception:
+                pass
+            print("\nReservations:")
+            for r in o.list_reservations():
+                print(f"ID {r.res_id} | {r.name} | {r.r_type} | {r.arrival} | {r.days} nights | {r.status}")
         elif sys.argv[1] == "bill":
             billing_cli()
-        elif sys.argv[1] == "gui":
-            run_gui()
         else:
-            print("Unknown option. Use one of: gui, demo, bill")
+            print("Unknown option. Use: demo, bill, or run with no args to open GUI.")
     else:
-        run_gui()
-        # Default: open GUI
         run_gui()
