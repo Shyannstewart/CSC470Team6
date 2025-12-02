@@ -699,56 +699,76 @@ def run_gui():
     cancel_button.grid(row=2, column=2, pady=5)
 
     def show_income_report():
-    report = Reports(ooad)
-    text = report.expected_income_report()
-    win = tk.Toplevel(root)
-    win.title("Expected Income (30 days)")
-    txt = tk.Text(win, width=80, height=25)
-    txt.pack(padx=10, pady=10)
-    txt.insert("1.0", text)
-    txt.config(state="disabled")
-income_button = tk.Button(list_frame, text="Show Income Report", command=show_income_report)
-income_button.grid(row=4, column=0, columnspan=3, pady=10)
-def show_incentive_report():
-    report = Reports(ooad)
-    text = report.incentive_discount_report()
-    win = tk.Toplevel(root)
-    win.title("Incentive Discount Report (30 days)")
-    txt = tk.Text(win, width=80, height=25)
-    txt.pack(padx=10, pady=10)
-    txt.insert("1.0", text)
-    txt.config(state="disabled")
-incentive_button = tk.Button(list_frame, text="Show Incentive Report", command=show_incentive_report)
-incentive_button.grid(row=5, column=0, columnspan=3, pady=10)
-def show_arrivals_report():
-    report = Reports(ooad)
-    text = report.daily_arrivals_report()
-    win = tk.Toplevel(root)
-    win.title("Daily Arrivals Report")
-    txt = tk.Text(win, width=80, height=25)
-    txt.pack(padx=10, pady=10)
-    txt.insert("1.0", text)
-    txt.config(state="disabled")
-arrivals_button = tk.Button(list_frame, text="Show Arrivals Report", command=show_arrivals_report)
-arrivals_button.grid(row=6, column=0, columnspan=3, pady=10)
-def show_daily_occupancy():
-    report = Reports(ooad)
-    text = report.daily_occupancy_report()
-    win = tk.Toplevel(root)
-    win.title("Daily Occupancy Report")
-    txt = tk.Text(win, width=80, height=25)
-    txt.pack(padx=10, pady=10)
-    txt.insert("1.0", text)
-    txt.config(state="disabled")
-daily_occ_button = tk.Button(list_frame, text="Show Daily Occupancy", command=show_daily_occupancy)
-daily_occ_button.grid(row=7, column=0, columnspan=3, pady=10)
-def show_bill_window():
-    bill_win = tk.Toplevel(root)
-    bill_win.title("Print Accommodation Bill")
+      report = Reports(ooad)
+      text = report.expected_income_report()
 
-    tk.Label(bill_win, text="Reservation ID:").grid(row=0, column=0, padx=10, pady=10)
-    entry = tk.Entry(bill_win)
-    entry.grid(row=0, column=1, padx=10, pady=10)
+      win = tk.Toplevel(root)
+      win.title("Expected Income (30 days)")
+
+      txt = tk.Text(win, width=80, height=25)
+      txt.pack(padx=10, pady=10)
+      txt.insert("1.0", text)
+      txt.config(state="disabled")
+
+  income_button = tk.Button(list_frame, text="Show Income Report", command=show_income_report)
+  income_button.grid(row=4, column=0, columnspan=3, pady=10)
+
+
+    def show_incentive_report():
+      report = Reports(ooad)
+      text = report.incentive_discount_report()
+
+      win = tk.Toplevel(root)
+      win.title("Incentive Discount Report (30 days)")
+
+      txt = tk.Text(win, width=80, height=25)
+      txt.pack(padx=10, pady=10)
+      txt.insert("1.0", text)
+      txt.config(state="disabled")
+
+  incentive_button = tk.Button(list_frame, text="Show Incentive Report", command=show_incentive_report)
+  incentive_button.grid(row=5, column=0, columnspan=3, pady=10)
+
+
+    def show_arrivals_report():
+      report = Reports(ooad)
+      text = report.daily_arrivals_report()
+
+      win = tk.Toplevel(root)
+      win.title("Daily Arrivals Report")
+
+      txt = tk.Text(win, width=80, height=25)
+      txt.pack(padx=10, pady=10)
+      txt.insert("1.0", text)
+      txt.config(state="disabled")
+
+  arrivals_button = tk.Button(list_frame, text="Show Arrivals Report", command=show_arrivals_report)
+  arrivals_button.grid(row=6, column=0, columnspan=3, pady=10)
+
+
+    def show_daily_occupancy():
+      report = Reports(ooad)
+      text = report.daily_occupancy_report()
+
+      win = tk.Toplevel(root)
+      win.title("Daily Occupancy Report")
+
+      txt = tk.Text(win, width=80, height=25)
+      txt.pack(padx=10, pady=10)
+      txt.insert("1.0", text)
+      txt.config(state="disabled")
+
+  daily_occ_button = tk.Button(list_frame, text="Show Daily Occupancy", command=show_daily_occupancy)
+  daily_occ_button.grid(row=7, column=0, columnspan=3, pady=10)
+
+
+    def show_bill_window():
+      bill_win = tk.Toplevel(root)
+      bill_win.title("Print Accommodation Bill")
+
+      tk.Label(bill_win, text="Reservation ID:").grid(row=0, column=0, padx=10, pady=10)
+      entry = tk.Entry(bill_win)
+      entry.grid(row=0, column=1, padx=10, pady=10)
 
     def generate_bill():
         res_id = int(entry.get())
@@ -757,15 +777,18 @@ def show_bill_window():
 
         win = tk.Toplevel(root)
         win.title(f"Bill for Reservation {res_id}")
+
         txt = tk.Text(win, width=80, height=25)
         txt.pack(padx=10, pady=10)
         txt.insert("1.0", text)
         txt.config(state="disabled")
 
-    tk.Button(bill_win, text="Generate Bill", command=generate_bill).grid(row=1, column=0, columnspan=2, pady=10)
+    gen_button = tk.Button(bill_win, text="Generate Bill", command=generate_bill)
+    gen_button.grid(row=1, column=0, columnspan=2, pady=10)
 
-bill_button = tk.Button(list_frame, text="Print Accommodation Bill", command=show_bill_window)
-bill_button.grid(row=8, column=0, columnspan=3, pady=10)
+    bill_button = tk.Button(list_frame, text="Print Accommodation Bill", command=show_bill_window)
+    bill_button.grid(row=8, column=0, columnspan=3, pady=10)
+
 
 
     def check_availability():
