@@ -711,7 +711,7 @@ def run_gui():
       txt.config(state="disabled")
 
     income_button = tk.Button(list_frame, text="Show Income Report", command=show_income_report)
-    income_button.grid(row=4, column=0, columnspan=3, pady=10)
+    income_button.grid(row=3, column=0, columnspan=3, pady=10)
 
     def show_expected_occupancy():
       report = Reports(ooad)
@@ -726,7 +726,7 @@ def run_gui():
       txt.config(state="disabled")
 
     occ_button = tk.Button(list_frame, text="Show Expected Occupancy", command=show_expected_occupancy)
-    occ_button.grid(row=9, column=0, columnspan=3, pady=10)
+    occ_button.grid(row=10, column=0, columnspan=3, pady=10)
 
 
 
@@ -802,8 +802,8 @@ def run_gui():
       gen_button = tk.Button(bill_win, text="Generate Bill", command=generate_bill)
       gen_button.grid(row=1, column=0, columnspan=2, pady=10)
 
-      bill_button = tk.Button(list_frame, text="Print Accommodation Bill", command=show_bill_window)
-      bill_button.grid(row=8, column=0, columnspan=3, pady=10)
+    bill_button = tk.Button(list_frame, text="Print Accommodation Bill", command=show_bill_window)
+    bill_button.grid(row=11, column=0, columnspan=3, pady=10)
 
 
 
