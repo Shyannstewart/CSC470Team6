@@ -2,7 +2,7 @@
 """
 Created on Wed Dec  3 21:06:07 2025
 
-@author: Jahei
+@authors: Team 6
 """
 
 # Jose Code.py (fixed)
@@ -1249,3 +1249,4 @@ if __name__ == "__main__":
             print("Unknown option. Use one of: gui, demo, bill")
     else:
         run_gui()
+
