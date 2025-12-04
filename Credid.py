@@ -12,6 +12,9 @@ Created on Wed Dec  3 20:55:34 2025
 
 Fixed for Python 3.10 / IDLE (requires 'cryptography' package)
 @author: Team 6 (fixed)
+Important:
+- Install cryptography for Python 3.10 before running:
+    py -3.10 -m pip install cryptography
 """
 
 import sys
@@ -1249,5 +1252,6 @@ if __name__ == "__main__":
             print("Unknown option. Use one of: gui, demo, bill")
     else:
         run_gui()
+
 
 
